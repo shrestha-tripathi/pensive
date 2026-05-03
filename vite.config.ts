@@ -1,0 +1,51 @@
+import { defineConfig } from 'vite';
+import react from '@vitejs/plugin-react';
+import tailwindcss from '@tailwindcss/vite';
+import { VitePWA } from 'vite-plugin-pwa';
+
+export default defineConfig({
+  base: process.env.VITE_BASE ?? '/pensive/',
+  plugins: [
+    react(),
+    tailwindcss(),
+    VitePWA({
+      registerType: 'autoUpdate',
+      includeAssets: ['coi-serviceworker.min.js'],
+      manifest: {
+        name: 'Pensive',
+        short_name: 'Pensive',
+        description: 'Local-first notes with on-device AI transcription',
+        theme_color: '#8B5CF6',
+        background_color: '#FAFAF7',
+        display: 'standalone',
+        start_url: '.',
+        scope: '.',
+        icons: [
+          { src: 'favicon.svg', sizes: 'any', type: 'image/svg+xml', purpose: 'any' },
+        ],
+      },
+      workbox: {
+        globPatterns: ['**/*.{js,css,html,svg,png,ico,webmanifest}'],
+        maximumFileSizeToCacheInBytes: 5 * 1024 * 1024,
+        navigateFallback: null,
+      },
+    }),
+  ],
+  optimizeDeps: { exclude: ['@huggingface/transformers'] },
+  worker: { format: 'es' },
+  build: {
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          tiptap: [
+            '@tiptap/react',
+            '@tiptap/starter-kit',
+            '@tiptap/extension-placeholder',
+            '@tiptap/extension-task-list',
+            '@tiptap/extension-task-item',
+          ],
+        } as any,
+      },
+    },
+  },
+});
