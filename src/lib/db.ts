@@ -10,11 +10,23 @@ export interface Note {
   parentId: string | null;
   order: number;
   starred?: boolean;
+  tags?: string[];
 }
 
 const DB_NAME = 'pensive';
 const STORE = 'notes';
 const EMB_STORE = 'embeddings';
+const ATT_STORE = 'attachments';
+
+export interface Attachment {
+  id: string;
+  noteId: string | null;
+  mimeType: string;
+  blob: Blob;
+  createdAt: number;
+  width?: number;
+  height?: number;
+}
 
 export interface NoteEmbedding {
   id: string;
@@ -28,7 +40,7 @@ export interface NoteEmbedding {
 let dbp: Promise<IDBPDatabase> | null = null;
 function db() {
   if (!dbp) {
-    dbp = openDB(DB_NAME, 3, {
+    dbp = openDB(DB_NAME, 5, {
       async upgrade(d, oldVersion, _newVersion, tx) {
         if (!d.objectStoreNames.contains(STORE)) {
           const s = d.createObjectStore(STORE, { keyPath: 'id' });
@@ -50,6 +62,18 @@ function db() {
             if (n.starred === undefined) n.starred = false;
             await store.put(n);
           }
+        }
+        if (oldVersion < 4) {
+          const store = tx.objectStore(STORE);
+          const all = await store.getAll();
+          for (const n of all as any[]) {
+            if (!Array.isArray(n.tags)) n.tags = [];
+            await store.put(n);
+          }
+        }
+        if (oldVersion < 5 && !d.objectStoreNames.contains(ATT_STORE)) {
+          const a = d.createObjectStore(ATT_STORE, { keyPath: 'id' });
+          a.createIndex('noteId', 'noteId');
         }
       },
     });
@@ -84,6 +108,7 @@ export async function listNotes(): Promise<Note[]> {
   for (const n of all) {
     if (n.parentId === undefined) n.parentId = null;
     if (n.order === undefined) n.order = 0;
+    if (!Array.isArray(n.tags)) n.tags = [];
   }
   return all;
 }
@@ -112,6 +137,7 @@ export async function clearAll(): Promise<void> {
   const d = await db();
   await d.clear(STORE);
   await d.clear(EMB_STORE);
+  if (d.objectStoreNames.contains(ATT_STORE)) await d.clear(ATT_STORE);
 }
 
 export function newNote(parentId: string | null = null, order = 0): Note {
@@ -126,6 +152,7 @@ export function newNote(parentId: string | null = null, order = 0): Note {
     parentId,
     order,
     starred: false,
+    tags: [],
   };
 }
 
@@ -293,4 +320,18 @@ export function getPath(notes: Note[], id: string): Note[] {
     cur = cur.parentId ? byId.get(cur.parentId) : undefined;
   }
   return out;
+}
+
+// ── Attachments (image blobs) ───────────────────────────────────────
+export async function putAttachment(a: Attachment): Promise<void> {
+  await (await db()).put(ATT_STORE, a);
+}
+export async function getAttachment(id: string): Promise<Attachment | undefined> {
+  return (await db()).get(ATT_STORE, id);
+}
+export async function deleteAttachment(id: string): Promise<void> {
+  await (await db()).delete(ATT_STORE, id);
+}
+export async function listAttachmentsForNote(noteId: string): Promise<Attachment[]> {
+  return (await (await db()).getAllFromIndex(ATT_STORE, 'noteId', noteId)) as Attachment[];
 }

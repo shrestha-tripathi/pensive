@@ -1,11 +1,14 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Download, Lock, Sparkles, Star, ChevronRight, Archive } from 'lucide-react';
+import { useCallback, useEffect, useMemo, useRef, useState, lazy, Suspense } from 'react';
+import { Download, Lock, Sparkles, Star, ChevronRight, Archive, Network } from 'lucide-react';
 import type { Editor } from '@tiptap/react';
 import { NoteEditor } from './components/Editor';
 import { Sidebar } from './components/Sidebar';
 import { SettingsPanel } from './components/Settings';
 import { MicButton } from './components/MicButton';
 import { QuickSwitcher } from './components/QuickSwitcher';
+import { TagChips } from './components/TagChips';
+import { RelatedNotes } from './components/RelatedNotes';
+const GraphView = lazy(() => import('./components/GraphView'));
 import { useTheme } from './hooks/useTheme';
 import { useTranscriber, type TranscriberSettings } from './hooks/useTranscriber';
 import {
@@ -28,6 +31,7 @@ import {
 import { sampleNote } from './lib/sample';
 import { ChatPanel } from './components/ChatPanel';
 import { indexNote, reindexStale } from './lib/vectorIndex';
+import { computeAutoTags } from './lib/autoTags';
 import { streamChat } from './lib/llm';
 
 const RECENT_KEY = 'pensive-recent-v1';
@@ -46,6 +50,8 @@ export function App() {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [chatOpen, setChatOpen] = useState(false);
   const [switchOpen, setSwitchOpen] = useState(false);
+  const [graphOpen, setGraphOpen] = useState(false);
+  const [autoTagging, setAutoTagging] = useState(false);
   const [recent, setRecent] = useState<string[]>(loadRecent);
   const [tSettings, setTSettings] = useState<TranscriberSettings>(() => {
     try {
@@ -107,9 +113,42 @@ export function App() {
       await putNote(updated);
       setActive(updated);
       setNotes(prev => prev.map(n => n.id === updated.id ? updated : n));
-      indexNote(updated).catch(err => console.warn('[indexNote]', err));
+      indexNote(updated).then(async () => {
+        // Auto-tag once after first meaningful save if note has no tags yet.
+        if ((!updated.tags || updated.tags.length === 0) && plain.trim().length > 80) {
+          try {
+            const tags = await computeAutoTags(plain);
+            if (tags.length) {
+              const withTags = { ...updated, tags };
+              await putNote(withTags);
+              setActive(prev => (prev && prev.id === withTags.id ? withTags : prev));
+              setNotes(prev => prev.map(n => n.id === withTags.id ? withTags : n));
+            }
+          } catch (e) { console.warn('[autoTags]', e); }
+        }
+      }).catch(err => console.warn('[indexNote]', err));
     }, 500);
   }, [active]);
+
+  const handleSetTags = useCallback(async (id: string, tags: string[]) => {
+    const n = notes.find(x => x.id === id);
+    if (!n) return;
+    const updated = { ...n, tags, updatedAt: Date.now() };
+    await putNote(updated);
+    setNotes(prev => prev.map(x => x.id === id ? updated : x));
+    if (id === activeId) setActive(updated);
+  }, [notes, activeId]);
+
+  const handleAutoTag = useCallback(async () => {
+    if (!active) return;
+    setAutoTagging(true);
+    try {
+      const tags = await computeAutoTags(active.plainText);
+      const merged = Array.from(new Set([...(active.tags ?? []), ...tags])).slice(0, 6);
+      await handleSetTags(active.id, merged);
+    } catch (e) { console.warn('[autoTag]', e); }
+    finally { setAutoTagging(false); }
+  }, [active, handleSetTags]);
 
   const nextRootOrder = useCallback(() => {
     const roots = notes.filter(n => !n.parentId);
@@ -373,6 +412,13 @@ export function App() {
               </button>
             )}
             <button
+              onClick={() => setGraphOpen(true)}
+              className="flex items-center gap-1.5 text-xs px-2.5 py-1.5 rounded-md border border-warm-200 dark:border-[#26262b] hover:bg-warm-100 dark:hover:bg-[#1c1c20] text-warm-700 dark:text-warm-300 transition"
+              title="Knowledge graph"
+            >
+              <Network className="w-3.5 h-3.5" /> Graph
+            </button>
+            <button
               onClick={() => setChatOpen(true)}
               className="flex items-center gap-1.5 text-xs px-2.5 py-1.5 rounded-md border border-amethyst-300/50 bg-amethyst-50 dark:bg-amethyst-500/10 hover:bg-amethyst-50/80 dark:hover:bg-amethyst-500/20 text-amethyst-700 dark:text-amethyst-300 transition"
               title="Ask your notes (⌘K)"
@@ -400,16 +446,29 @@ export function App() {
         <div className="flex-1 overflow-y-auto scrollbar-thin">
           <div className="max-w-[760px] mx-auto px-6 py-10">
             {active ? (
-              <NoteEditor
-                key={editorKey}
-                noteId={active.id}
-                initialContent={active.content}
-                onChange={handleEditorChange}
-                onEditor={ed => { editorRef.current = ed; }}
-                notes={notes}
-                onOpenNote={setActiveId}
-                onAICommand={onAICommand}
-              />
+              <>
+                <TagChips
+                  tags={active.tags ?? []}
+                  onChange={(tags) => handleSetTags(active.id, tags)}
+                  onAutoTag={handleAutoTag}
+                  autoTagging={autoTagging}
+                />
+                <NoteEditor
+                  key={editorKey}
+                  noteId={active.id}
+                  initialContent={active.content}
+                  onChange={handleEditorChange}
+                  onEditor={ed => { editorRef.current = ed; }}
+                  notes={notes}
+                  onOpenNote={setActiveId}
+                  onAICommand={onAICommand}
+                />
+                <RelatedNotes
+                  noteId={active.id}
+                  noteUpdatedAt={active.updatedAt}
+                  onOpen={setActiveId}
+                />
+              </>
             ) : (
               <div className="text-warm-500 text-center py-20">
                 <p>No note selected. Create a new one from the sidebar.</p>
@@ -451,6 +510,15 @@ export function App() {
         onClose={() => setSwitchOpen(false)}
         onSelect={(id) => setActiveId(id)}
       />
+      {graphOpen && (
+        <Suspense fallback={<div className="fixed inset-0 z-40 flex items-center justify-center bg-canvas dark:bg-ink text-warm-500 text-sm">Loading graph…</div>}>
+          <GraphView
+            notes={notes}
+            onOpen={(id) => setActiveId(id)}
+            onClose={() => setGraphOpen(false)}
+          />
+        </Suspense>
+      )}
     </div>
   );
 }

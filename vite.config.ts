@@ -58,6 +58,7 @@ export default defineConfig({
           fuse: ['fuse.js'],
           transformers: ['@huggingface/transformers'],
           webllm: ['@mlc-ai/web-llm'],
+          graph: ['react-force-graph-2d'],
         } as any,
       },
     },

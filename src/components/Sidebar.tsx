@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState, useRef, useCallback } from 'react';
 import {
   Plus, Search, Settings as SettingsIcon, Moon, Sun, Feather,
-  ChevronRight, ChevronDown, MoreHorizontal, FileText, Star, Clock,
+  ChevronRight, ChevronDown, MoreHorizontal, FileText, Star, Clock, Hash,
 } from 'lucide-react';
 import {
   DndContext, type DragEndEvent, type DragStartEvent, PointerSensor, useSensor, useSensors, closestCenter,
@@ -117,16 +117,26 @@ export function Sidebar(p: Props) {
   const [menu, setMenu] = useState<{ x: number; y: number; id: string } | null>(null);
   const [dragOver, setDragOver] = useState<{ id: string; mode: 'before' | 'after' | 'inside' } | null>(null);
   const [activeDragId, setActiveDragId] = useState<string | null>(null);
+  const [tagFilter, setTagFilter] = useState<string | null>(null);
   const rowYRef = useRef<Map<string, DOMRect>>(new Map());
 
   const tree = useMemo(() => buildTree(p.notes), [p.notes]);
 
+  const tagCounts = useMemo(() => {
+    const m = new Map<string, number>();
+    for (const n of p.notes) for (const t of n.tags ?? []) m.set(t, (m.get(t) ?? 0) + 1);
+    return [...m.entries()].sort((a, b) => b[1] - a[1]);
+  }, [p.notes]);
+
   // Search across all notes (flat)
   const filtered = useMemo(() => {
+    if (tagFilter) {
+      return p.notes.filter(n => (n.tags ?? []).includes(tagFilter));
+    }
     if (!p.query.trim()) return null;
     const q = p.query.toLowerCase();
     return p.notes.filter(n => (n.title + ' ' + n.plainText).toLowerCase().includes(q));
-  }, [p.query, p.notes]);
+  }, [p.query, p.notes, tagFilter]);
 
   const flat = useMemo(() => flattenTree(tree, expanded), [tree, expanded]);
 
@@ -273,7 +283,12 @@ export function Sidebar(p: Props) {
       <div className="flex-1 overflow-y-auto scrollbar-thin px-2 pb-2">
         {filtered ? (
           <div className="py-1">
-            <div className="text-[10px] uppercase tracking-wide text-warm-500 px-2 py-1">Search</div>
+            <div className="text-[10px] uppercase tracking-wide text-warm-500 px-2 py-1 flex items-center justify-between">
+              <span>{tagFilter ? <>Tag: <span className="text-amethyst-600">#{tagFilter}</span></> : 'Search'}</span>
+              {tagFilter && (
+                <button onClick={() => setTagFilter(null)} className="text-warm-500 hover:text-ink dark:hover:text-white normal-case tracking-normal">clear</button>
+              )}
+            </div>
             {filtered.length === 0 && <div className="text-xs text-warm-500 px-3 py-4 text-center">No matches</div>}
             {filtered.map(n => (
               <div key={n.id} onClick={() => p.onSelect(n.id)}
@@ -306,6 +321,22 @@ export function Sidebar(p: Props) {
                       n.id === p.activeId ? 'bg-amethyst-50 dark:bg-amethyst-500/10 text-amethyst-700 dark:text-amethyst-300' : 'hover:bg-warm-100 dark:hover:bg-[#1c1c20]'
                     }`}>{n.title || 'Untitled'}</div>
                 ))}
+              </div>
+            )}
+            {tagCounts.length > 0 && (
+              <div className="mb-2">
+                <div className="text-[10px] uppercase tracking-wide text-warm-500 px-2 py-1 flex items-center gap-1"><Hash className="w-3 h-3" /> Tags</div>
+                <div className="flex flex-wrap gap-1 px-2 pb-1">
+                  {tagCounts.slice(0, 30).map(([tag, count]) => (
+                    <button
+                      key={tag}
+                      onClick={() => setTagFilter(tag)}
+                      className="inline-flex items-center gap-1 text-[11px] px-1.5 py-0.5 rounded-full bg-warm-100 dark:bg-[#1c1c20] hover:bg-amethyst-50 dark:hover:bg-amethyst-500/10 text-warm-700 dark:text-warm-300 hover:text-amethyst-700 dark:hover:text-amethyst-300 border border-warm-200 dark:border-[#26262b]"
+                    >
+                      #{tag}<span className="opacity-60">{count}</span>
+                    </button>
+                  ))}
+                </div>
               </div>
             )}
             <div className="text-[10px] uppercase tracking-wide text-warm-500 px-2 py-1">Pages</div>
