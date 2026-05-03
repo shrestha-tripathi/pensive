@@ -26,12 +26,12 @@ export default defineConfig({
       },
       workbox: {
         globPatterns: ['**/*.{js,css,html,svg,png,ico,webmanifest}'],
-        maximumFileSizeToCacheInBytes: 5 * 1024 * 1024,
+        maximumFileSizeToCacheInBytes: 25 * 1024 * 1024,
         navigateFallback: null,
       },
     }),
   ],
-  optimizeDeps: { exclude: ['@huggingface/transformers'] },
+  optimizeDeps: { exclude: ['@huggingface/transformers', '@mlc-ai/web-llm'] },
   worker: { format: 'es' },
   build: {
     rollupOptions: {
@@ -44,6 +44,8 @@ export default defineConfig({
             '@tiptap/extension-task-list',
             '@tiptap/extension-task-item',
           ],
+          transformers: ['@huggingface/transformers'],
+          webllm: ['@mlc-ai/web-llm'],
         } as any,
       },
     },

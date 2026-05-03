@@ -11,20 +11,59 @@ export interface Note {
 
 const DB_NAME = 'pensive';
 const STORE = 'notes';
+const EMB_STORE = 'embeddings';
+
+export interface NoteEmbedding {
+  id: string; // `${noteId}:${chunkIdx}`
+  noteId: string;
+  chunkIdx: number;
+  text: string;
+  vector: Float32Array;
+  updatedAt: number;
+}
 
 let dbp: Promise<IDBPDatabase> | null = null;
 function db() {
   if (!dbp) {
-    dbp = openDB(DB_NAME, 1, {
-      upgrade(d) {
+    dbp = openDB(DB_NAME, 2, {
+      upgrade(d, oldVersion) {
         if (!d.objectStoreNames.contains(STORE)) {
           const s = d.createObjectStore(STORE, { keyPath: 'id' });
           s.createIndex('updatedAt', 'updatedAt');
+        }
+        if (oldVersion < 2 && !d.objectStoreNames.contains(EMB_STORE)) {
+          const e = d.createObjectStore(EMB_STORE, { keyPath: 'id' });
+          e.createIndex('noteId', 'noteId');
         }
       },
     });
   }
   return dbp;
+}
+
+export async function getEmbeddingsForNote(noteId: string): Promise<NoteEmbedding[]> {
+  const d = await db();
+  return (await d.getAllFromIndex(EMB_STORE, 'noteId', noteId)) as NoteEmbedding[];
+}
+
+export async function getAllEmbeddings(): Promise<NoteEmbedding[]> {
+  const d = await db();
+  return (await d.getAll(EMB_STORE)) as NoteEmbedding[];
+}
+
+export async function deleteEmbeddingsForNote(noteId: string): Promise<void> {
+  const d = await db();
+  const tx = d.transaction(EMB_STORE, 'readwrite');
+  const idx = tx.store.index('noteId');
+  for await (const cur of idx.iterate(noteId)) await cur.delete();
+  await tx.done;
+}
+
+export async function putEmbeddings(embs: NoteEmbedding[]): Promise<void> {
+  const d = await db();
+  const tx = d.transaction(EMB_STORE, 'readwrite');
+  for (const e of embs) await tx.store.put(e);
+  await tx.done;
 }
 
 export async function listNotes(): Promise<Note[]> {
@@ -46,7 +85,9 @@ export async function deleteNote(id: string): Promise<void> {
 }
 
 export async function clearAll(): Promise<void> {
-  await (await db()).clear(STORE);
+  const d = await db();
+  await d.clear(STORE);
+  await d.clear(EMB_STORE);
 }
 
 export function newNote(): Note {

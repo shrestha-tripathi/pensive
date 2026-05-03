@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Download, Lock } from 'lucide-react';
+import { Download, Lock, Sparkles } from 'lucide-react';
 import type { Editor } from '@tiptap/react';
 import { NoteEditor } from './components/Editor';
 import { Sidebar } from './components/Sidebar';
@@ -20,6 +20,8 @@ import {
   type Note,
 } from './lib/db';
 import { sampleNote } from './lib/sample';
+import { ChatPanel } from './components/ChatPanel';
+import { indexNote, reindexStale } from './lib/vectorIndex';
 
 export function App() {
   const { theme, toggle } = useTheme();
@@ -28,6 +30,7 @@ export function App() {
   const [active, setActive] = useState<Note | null>(null);
   const [query, setQuery] = useState('');
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [chatOpen, setChatOpen] = useState(false);
   const [tSettings, setTSettings] = useState<TranscriberSettings>(() => {
     try {
       const raw = localStorage.getItem('pensive-tsettings');
@@ -52,8 +55,25 @@ export function App() {
       }
       setNotes(all);
       setActiveId(all[0].id);
+      // Background reindex any missing/stale embeddings.
+      const ric = (window as any).requestIdleCallback ?? ((cb: any) => setTimeout(cb, 800));
+      ric(() => { reindexStale().catch(err => console.warn('[reindex]', err)); });
     })();
   }, []);
+
+  // Cmd/Ctrl+K → toggle chat
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
+        e.preventDefault();
+        setChatOpen(o => !o);
+      } else if (e.key === 'Escape' && chatOpen) {
+        setChatOpen(false);
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [chatOpen]);
 
   // Load active note
   useEffect(() => {
@@ -79,6 +99,7 @@ export function App() {
         const others = prev.filter(n => n.id !== updated.id);
         return [updated, ...others].sort((a, b) => b.updatedAt - a.updatedAt);
       });
+      indexNote(updated).catch(err => console.warn('[indexNote]', err));
     }, 500);
   }, [active]);
 
@@ -153,6 +174,14 @@ export function App() {
           <div className="text-sm text-warm-500 truncate">{active?.title || 'Pensive'}</div>
           <div className="flex items-center gap-2">
             <button
+              onClick={() => setChatOpen(true)}
+              className="flex items-center gap-1.5 text-xs px-2.5 py-1.5 rounded-md border border-amethyst-300/50 bg-amethyst-50 dark:bg-amethyst-500/10 hover:bg-amethyst-50/80 dark:hover:bg-amethyst-500/20 text-amethyst-700 dark:text-amethyst-300 transition"
+              title="Ask your notes (⌘K)"
+            >
+              <Sparkles className="w-3.5 h-3.5" /> Ask
+              <kbd className="ml-1 hidden sm:inline text-[10px] px-1 py-0.5 rounded bg-white/60 dark:bg-black/30 border border-amethyst-300/40">⌘K</kbd>
+            </button>
+            <button
               onClick={handleExport}
               disabled={!active}
               className="flex items-center gap-1.5 text-xs px-2.5 py-1.5 rounded-md border border-warm-200 dark:border-[#26262b] hover:bg-warm-100 dark:hover:bg-[#1c1c20] text-warm-700 dark:text-warm-300 disabled:opacity-50 transition"
@@ -189,7 +218,7 @@ export function App() {
             onStop={stopMic}
           />
           <div className="hidden sm:flex items-center gap-1.5 text-[11px] text-warm-500 px-3 py-1 rounded-full bg-warm-100 dark:bg-[#1c1c20] border border-warm-200 dark:border-[#26262b]">
-            <Lock className="w-3 h-3" /> Stored only on this device · Try the mic to dictate
+            <Lock className="w-3 h-3" /> On-device · Press <kbd className="px-1 rounded bg-white/70 dark:bg-black/40 border border-warm-200 dark:border-[#26262b]">⌘K</kbd> to ask your notes
           </div>
         </footer>
       </main>
@@ -200,6 +229,12 @@ export function App() {
         settings={tSettings}
         setSettings={setTSettings}
         onClearAll={handleClearAll}
+      />
+      <ChatPanel
+        open={chatOpen}
+        onClose={() => setChatOpen(false)}
+        notes={notes}
+        onJumpToNote={(id) => setActiveId(id)}
       />
     </div>
   );

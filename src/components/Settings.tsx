@@ -1,5 +1,7 @@
-import { X, Trash2 } from 'lucide-react';
+import { useState } from 'react';
+import { X, Trash2, RefreshCw } from 'lucide-react';
 import type { TranscriberSettings } from '../hooks/useTranscriber';
+import { reindexAll } from '../lib/vectorIndex';
 
 interface Props {
   open: boolean;
@@ -10,7 +12,21 @@ interface Props {
 }
 
 export function SettingsPanel({ open, onClose, settings, setSettings, onClearAll }: Props) {
+  const [reindexing, setReindexing] = useState(false);
+  const [reindexMsg, setReindexMsg] = useState<string | null>(null);
   if (!open) return null;
+  const doReindex = async () => {
+    setReindexing(true);
+    setReindexMsg('Reindexing…');
+    try {
+      const n = await reindexAll({ onProgress: (d, t) => setReindexMsg(`Reindexing ${d}/${t}…`) });
+      setReindexMsg(`Reindexed ${n} note${n === 1 ? '' : 's'}.`);
+    } catch (e: any) {
+      setReindexMsg(`Failed: ${e?.message ?? e}`);
+    } finally {
+      setReindexing(false);
+    }
+  };
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm" onClick={onClose}>
       <div className="bg-canvas dark:bg-[#17171a] w-full max-w-md rounded-xl shadow-2xl border border-warm-200 dark:border-[#26262b] p-5" onClick={e => e.stopPropagation()}>
@@ -41,6 +57,17 @@ export function SettingsPanel({ open, onClose, settings, setSettings, onClearAll
             </select>
           </div>
           <div className="pt-2 border-t border-warm-200 dark:border-[#26262b]">
+            <label className="text-xs text-warm-500 uppercase tracking-wide">Semantic search</label>
+            <button
+              onClick={doReindex}
+              disabled={reindexing}
+              className="mt-1 flex items-center gap-2 text-sm px-3 py-2 rounded-md border border-warm-200 dark:border-[#26262b] hover:bg-warm-100 dark:hover:bg-[#1c1c20] text-warm-700 dark:text-warm-300 disabled:opacity-50 transition"
+            >
+              <RefreshCw className={`w-4 h-4 ${reindexing ? 'animate-spin' : ''}`} /> Reindex all notes
+            </button>
+            {reindexMsg && <div className="text-[11px] text-warm-500 mt-1">{reindexMsg}</div>}
+          </div>
+          <div className="pt-2 border-t border-warm-200 dark:border-[#26262b]">
             <button
               onClick={() => { if (confirm('Delete ALL notes? This cannot be undone.')) onClearAll(); }}
               className="flex items-center gap-2 text-sm text-rose-600 hover:text-rose-700"
@@ -49,7 +76,7 @@ export function SettingsPanel({ open, onClose, settings, setSettings, onClearAll
             </button>
           </div>
           <p className="text-[11px] text-warm-500 leading-relaxed pt-2">
-            Pensive runs entirely in your browser. Notes live in IndexedDB. The Whisper model downloads once from Hugging Face and caches in your browser.
+            Pensive runs entirely in your browser. Notes, embeddings, and the AI model all live on this device.
           </p>
         </div>
       </div>
