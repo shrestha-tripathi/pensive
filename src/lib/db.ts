@@ -7,6 +7,9 @@ export interface Note {
   plainText: string;
   createdAt: number;
   updatedAt: number;
+  parentId: string | null;
+  order: number;
+  starred?: boolean;
 }
 
 const DB_NAME = 'pensive';
@@ -14,7 +17,7 @@ const STORE = 'notes';
 const EMB_STORE = 'embeddings';
 
 export interface NoteEmbedding {
-  id: string; // `${noteId}:${chunkIdx}`
+  id: string;
   noteId: string;
   chunkIdx: number;
   text: string;
@@ -25,8 +28,8 @@ export interface NoteEmbedding {
 let dbp: Promise<IDBPDatabase> | null = null;
 function db() {
   if (!dbp) {
-    dbp = openDB(DB_NAME, 2, {
-      upgrade(d, oldVersion) {
+    dbp = openDB(DB_NAME, 3, {
+      async upgrade(d, oldVersion, _newVersion, tx) {
         if (!d.objectStoreNames.contains(STORE)) {
           const s = d.createObjectStore(STORE, { keyPath: 'id' });
           s.createIndex('updatedAt', 'updatedAt');
@@ -35,6 +38,19 @@ function db() {
           const e = d.createObjectStore(EMB_STORE, { keyPath: 'id' });
           e.createIndex('noteId', 'noteId');
         }
+        if (oldVersion < 3) {
+          // Backfill parentId/order on existing notes (preserve all data).
+          const store = tx.objectStore(STORE);
+          const all = await store.getAll();
+          all.sort((a: any, b: any) => (b.updatedAt ?? 0) - (a.updatedAt ?? 0));
+          for (let i = 0; i < all.length; i++) {
+            const n: any = all[i];
+            if (n.parentId === undefined) n.parentId = null;
+            if (n.order === undefined) n.order = i;
+            if (n.starred === undefined) n.starred = false;
+            await store.put(n);
+          }
+        }
       },
     });
   }
@@ -42,15 +58,11 @@ function db() {
 }
 
 export async function getEmbeddingsForNote(noteId: string): Promise<NoteEmbedding[]> {
-  const d = await db();
-  return (await d.getAllFromIndex(EMB_STORE, 'noteId', noteId)) as NoteEmbedding[];
+  return (await (await db()).getAllFromIndex(EMB_STORE, 'noteId', noteId)) as NoteEmbedding[];
 }
-
 export async function getAllEmbeddings(): Promise<NoteEmbedding[]> {
-  const d = await db();
-  return (await d.getAll(EMB_STORE)) as NoteEmbedding[];
+  return (await (await db()).getAll(EMB_STORE)) as NoteEmbedding[];
 }
-
 export async function deleteEmbeddingsForNote(noteId: string): Promise<void> {
   const d = await db();
   const tx = d.transaction(EMB_STORE, 'readwrite');
@@ -58,7 +70,6 @@ export async function deleteEmbeddingsForNote(noteId: string): Promise<void> {
   for await (const cur of idx.iterate(noteId)) await cur.delete();
   await tx.done;
 }
-
 export async function putEmbeddings(embs: NoteEmbedding[]): Promise<void> {
   const d = await db();
   const tx = d.transaction(EMB_STORE, 'readwrite');
@@ -68,29 +79,42 @@ export async function putEmbeddings(embs: NoteEmbedding[]): Promise<void> {
 
 export async function listNotes(): Promise<Note[]> {
   const d = await db();
-  const all = await d.getAll(STORE);
-  return all.sort((a, b) => b.updatedAt - a.updatedAt);
+  const all = (await d.getAll(STORE)) as Note[];
+  // Normalize defaults defensively for any pre-v3 reads-in-flight.
+  for (const n of all) {
+    if (n.parentId === undefined) n.parentId = null;
+    if (n.order === undefined) n.order = 0;
+  }
+  return all;
 }
-
 export async function getNote(id: string): Promise<Note | undefined> {
   return (await db()).get(STORE, id);
 }
-
 export async function putNote(n: Note): Promise<void> {
   await (await db()).put(STORE, n);
 }
-
+export async function putNotes(ns: Note[]): Promise<void> {
+  const d = await db();
+  const tx = d.transaction(STORE, 'readwrite');
+  for (const n of ns) await tx.store.put(n);
+  await tx.done;
+}
 export async function deleteNote(id: string): Promise<void> {
   await (await db()).delete(STORE, id);
 }
-
+export async function deleteNotes(ids: string[]): Promise<void> {
+  const d = await db();
+  const tx = d.transaction(STORE, 'readwrite');
+  for (const id of ids) await tx.store.delete(id);
+  await tx.done;
+}
 export async function clearAll(): Promise<void> {
   const d = await db();
   await d.clear(STORE);
   await d.clear(EMB_STORE);
 }
 
-export function newNote(): Note {
+export function newNote(parentId: string | null = null, order = 0): Note {
   const now = Date.now();
   return {
     id: crypto.randomUUID(),
@@ -99,6 +123,9 @@ export function newNote(): Note {
     plainText: '',
     createdAt: now,
     updatedAt: now,
+    parentId,
+    order,
+    starred: false,
   };
 }
 
@@ -143,6 +170,7 @@ export function jsonToMarkdown(json: any): string {
       return t;
     }
     if (node.type === 'hardBreak') return '\n';
+    if (node.type === 'mention') return `@${node.attrs?.label ?? node.attrs?.id ?? ''}`;
     return (node.content ?? []).map(inline).join('');
   };
   const walk = (node: any, depth = 0) => {
@@ -187,10 +215,82 @@ export function jsonToMarkdown(json: any): string {
       case 'horizontalRule':
         lines.push('---', '');
         break;
+      case 'callout':
+        lines.push(`> ${node.attrs?.emoji ?? '💡'} ${(node.content ?? []).map(inline).join(' ')}`, '');
+        break;
+      case 'toggle':
+        lines.push(`<details><summary>${node.attrs?.summary ?? 'Toggle'}</summary>`, '');
+        (node.content ?? []).forEach((c: any) => walk(c, depth));
+        lines.push('</details>', '');
+        break;
+      case 'image':
+        lines.push(`![${node.attrs?.alt ?? ''}](${node.attrs?.src ?? ''})`, '');
+        break;
       default:
         if (node.content) node.content.forEach((c: any) => walk(c, depth));
     }
   };
   json.content.forEach((n: any) => walk(n));
   return lines.join('\n').replace(/\n{3,}/g, '\n\n').trim();
+}
+
+// ── Tree helpers ────────────────────────────────────────────────────────────
+export interface TreeNode {
+  note: Note;
+  children: TreeNode[];
+  depth: number;
+}
+
+export function buildTree(notes: Note[]): TreeNode[] {
+  const byParent = new Map<string | null, Note[]>();
+  for (const n of notes) {
+    const k = n.parentId ?? null;
+    const arr = byParent.get(k) ?? [];
+    arr.push(n);
+    byParent.set(k, arr);
+  }
+  for (const arr of byParent.values()) arr.sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+  const build = (parentId: string | null, depth: number): TreeNode[] =>
+    (byParent.get(parentId) ?? []).map(note => ({
+      note,
+      depth,
+      children: build(note.id, depth + 1),
+    }));
+  return build(null, 0);
+}
+
+export function flattenTree(tree: TreeNode[], expanded: Set<string>): TreeNode[] {
+  const out: TreeNode[] = [];
+  const walk = (nodes: TreeNode[]) => {
+    for (const n of nodes) {
+      out.push(n);
+      if (n.children.length && expanded.has(n.note.id)) walk(n.children);
+    }
+  };
+  walk(tree);
+  return out;
+}
+
+export function getDescendants(notes: Note[], id: string): Note[] {
+  const out: Note[] = [];
+  const childrenOf = (pid: string) => notes.filter(n => n.parentId === pid);
+  const walk = (pid: string) => {
+    for (const c of childrenOf(pid)) {
+      out.push(c);
+      walk(c.id);
+    }
+  };
+  walk(id);
+  return out;
+}
+
+export function getPath(notes: Note[], id: string): Note[] {
+  const byId = new Map(notes.map(n => [n.id, n]));
+  const out: Note[] = [];
+  let cur = byId.get(id);
+  while (cur) {
+    out.unshift(cur);
+    cur = cur.parentId ? byId.get(cur.parentId) : undefined;
+  }
+  return out;
 }

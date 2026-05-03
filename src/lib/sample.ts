@@ -16,6 +16,9 @@ export function sampleNote(): Note {
     plainText: plain,
     createdAt: now,
     updatedAt: now,
+    parentId: null,
+    order: 0,
+    starred: false,
     content: {
       type: 'doc',
       content: [
