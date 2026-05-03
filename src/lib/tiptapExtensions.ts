@@ -1,4 +1,28 @@
 import { Node, mergeAttributes } from '@tiptap/core';
+import Image from '@tiptap/extension-image';
+
+// Image variant that supports attachmentId (blob in IndexedDB) + caption.
+export const AttachmentImage = Image.extend({
+  name: 'image',
+  addAttributes() {
+    return {
+      ...(this.parent?.() ?? {}),
+      attachmentId: { default: null },
+      caption: { default: '' },
+    };
+  },
+  renderHTML({ HTMLAttributes, node }) {
+    const attrs: Record<string, any> = { ...HTMLAttributes };
+    if (node.attrs.attachmentId) {
+      attrs['data-attachment-id'] = node.attrs.attachmentId;
+      // Leave src blank — Editor.tsx resolves it to a blob: URL after mount.
+      delete attrs.src;
+    }
+    if (node.attrs.caption) attrs['data-caption'] = node.attrs.caption;
+    if (node.attrs.alt && !attrs.alt) attrs.alt = node.attrs.alt;
+    return ['img', mergeAttributes(attrs)];
+  },
+});
 
 export const Callout = Node.create({
   name: 'callout',
