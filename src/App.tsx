@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, lazy, Suspense } from 'react';
-import { Download, Lock, Sparkles, Star, ChevronRight, Archive, Network } from 'lucide-react';
+import { Download, Lock, Sparkles, Star, ChevronRight, Archive, Network, Menu } from 'lucide-react';
 import type { Editor } from '@tiptap/react';
 import { NoteEditor } from './components/Editor';
 import { Sidebar } from './components/Sidebar';
@@ -33,6 +33,7 @@ import { ChatPanel } from './components/ChatPanel';
 import { indexNote, reindexStale } from './lib/vectorIndex';
 import { computeAutoTags } from './lib/autoTags';
 import { streamChat } from './lib/llm';
+// Meeting Mode hook is wired in v1.4 — useMeetingRecorder kept for next iteration
 
 const RECENT_KEY = 'pensive-recent-v1';
 
@@ -52,6 +53,7 @@ export function App() {
   const [switchOpen, setSwitchOpen] = useState(false);
   const [graphOpen, setGraphOpen] = useState(false);
   const [autoTagging, setAutoTagging] = useState(false);
+  const [drawerOpen, setDrawerOpen] = useState(false);
   const [recent, setRecent] = useState<string[]>(loadRecent);
   const [tSettings, setTSettings] = useState<TranscriberSettings>(() => {
     try {
@@ -364,29 +366,47 @@ export function App() {
   const breadcrumb = useMemo(() => active ? getPath(notes, active.id) : [], [active, notes]);
 
   return (
-    <div className="flex h-full bg-canvas dark:bg-ink text-ink dark:text-[#ECECEC]">
-      <Sidebar
-        notes={notes}
-        activeId={activeId}
-        query={query}
-        setQuery={setQuery}
-        onSelect={setActiveId}
-        onCreate={handleCreate}
-        onCreateChild={handleCreateChild}
-        onDelete={handleDelete}
-        onDuplicate={handleDuplicate}
-        onRename={handleRename}
-        onMove={handleMove}
-        onToggleStar={handleToggleStar}
-        onOpenSettings={() => setSettingsOpen(true)}
-        onOpenQuickSwitch={() => setSwitchOpen(true)}
-        recentIds={recent}
-        theme={theme}
-        toggleTheme={toggle}
-      />
-      <main className="flex-1 flex flex-col overflow-hidden">
-        <header className="flex items-center justify-between px-6 py-3 border-b border-warm-200 dark:border-[#1f1f23] gap-3">
-          <div className="flex items-center gap-1 text-xs text-warm-500 truncate min-w-0">
+    <div className="flex h-full bg-canvas dark:bg-ink text-ink dark:text-[#ECECEC] relative">
+      {/* Mobile drawer backdrop */}
+      {drawerOpen && (
+        <div
+          className="fixed inset-0 z-30 bg-black/40 md:hidden"
+          onClick={() => setDrawerOpen(false)}
+        />
+      )}
+      <div
+        className={`md:static md:translate-x-0 fixed top-0 left-0 z-40 h-full transition-transform duration-200 ease-out ${drawerOpen ? 'translate-x-0' : '-translate-x-full'}`}
+      >
+        <Sidebar
+          notes={notes}
+          activeId={activeId}
+          query={query}
+          setQuery={setQuery}
+          onSelect={(id) => { setActiveId(id); setDrawerOpen(false); }}
+          onCreate={handleCreate}
+          onCreateChild={handleCreateChild}
+          onDelete={handleDelete}
+          onDuplicate={handleDuplicate}
+          onRename={handleRename}
+          onMove={handleMove}
+          onToggleStar={handleToggleStar}
+          onOpenSettings={() => setSettingsOpen(true)}
+          onOpenQuickSwitch={() => setSwitchOpen(true)}
+          recentIds={recent}
+          theme={theme}
+          toggleTheme={toggle}
+        />
+      </div>
+      <main className="flex-1 flex flex-col overflow-hidden min-w-0">
+        <header className="flex items-center justify-between px-3 md:px-6 py-3 border-b border-warm-200 dark:border-[#1f1f23] gap-2 md:gap-3">
+          <button
+            className="md:hidden p-1.5 rounded-md border border-warm-200 dark:border-[#26262b] hover:bg-warm-100 dark:hover:bg-[#1c1c20]"
+            onClick={() => setDrawerOpen(o => !o)}
+            aria-label="Open navigation"
+          >
+            <Menu className="w-4 h-4" />
+          </button>
+          <div className="flex items-center gap-1 text-xs text-warm-500 truncate min-w-0 flex-1">
             {breadcrumb.length === 0 ? (
               <span>Pensive</span>
             ) : breadcrumb.map((n, i) => (
@@ -444,7 +464,7 @@ export function App() {
         </header>
 
         <div className="flex-1 overflow-y-auto scrollbar-thin">
-          <div className="max-w-[760px] mx-auto px-6 py-10">
+          <div className="max-w-[760px] mx-auto px-4 md:px-6 py-6 md:py-10">
             {active ? (
               <>
                 <TagChips

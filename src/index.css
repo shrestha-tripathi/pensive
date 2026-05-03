@@ -199,3 +199,43 @@ body {
 }
 mark { background: #FEF08A; padding: 0 2px; border-radius: 2px; }
 .dark mark { background: rgba(254,240,138,0.35); color: inherit; }
+
+/* Mobile responsive */
+@media (max-width: 767px) {
+  .slash-menu {
+    position: fixed !important;
+    left: 8px !important;
+    right: 8px !important;
+    top: auto !important;
+    bottom: 8px !important;
+    width: auto !important;
+    max-width: none !important;
+    min-width: 0 !important;
+    max-height: 50vh;
+  }
+  .ProseMirror { font-size: 17px; }
+}
+
+@media (hover: none) and (pointer: coarse) {
+  .pensive-bubble-menu button { padding: 10px; min-width: 44px; min-height: 44px; }
+  .group .opacity-0 { opacity: 1 !important; }
+}
+
+.ProseMirror img[data-caption]::after {
+  content: attr(data-caption);
+  display: block;
+  font-size: 12px;
+  text-align: center;
+  color: var(--color-warm-500);
+  margin-top: 4px;
+}
+
+.pensive-meeting-toast {
+  position: fixed; top: 64px; right: 16px; z-index: 60;
+  background: var(--color-amethyst-500); color: white;
+  padding: 8px 14px; border-radius: 999px; font-size: 12px;
+  display: flex; align-items: center; gap: 8px;
+  box-shadow: 0 6px 20px -6px rgba(139,92,246,0.5);
+}
+.pensive-meeting-dot { width: 8px; height: 8px; border-radius: 50%;
+  background: #ff5b5b; animation: pulse-mic 1.2s ease-in-out infinite; }
