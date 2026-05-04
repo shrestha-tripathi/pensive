@@ -10,7 +10,7 @@ import { Table } from '@tiptap/extension-table';
 import { TableRow } from '@tiptap/extension-table-row';
 import { TableHeader } from '@tiptap/extension-table-header';
 import { TableCell } from '@tiptap/extension-table-cell';
-import { useEffect, useMemo, useRef } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { SlashCommands, type SlashItem } from '../lib/slashCommands';
 import { Callout, Toggle, AttachmentImage } from '../lib/tiptapExtensions';
@@ -18,8 +18,9 @@ import { storeImage } from '../lib/images';
 import { attachmentUrl } from '../lib/images';
 import { SlashMenu } from './SlashMenu';
 import { MentionMenu } from './MentionMenu';
+import { TableMenu } from './TableMenu';
 import type { Note } from '../lib/db';
-import { Bold, Italic, Code, Highlighter, Sparkles } from 'lucide-react';
+import { Bold, Italic, Code, Highlighter, Sparkles, Table as TableIcon } from 'lucide-react';
 
 interface Props {
   noteId: string;
@@ -227,20 +228,89 @@ export function NoteEditor({
     return () => onEditorRef.current?.(null);
   }, [editor]);
 
-  // Click handler for mentions.
+  // Click handler for mentions + toggle expand/collapse + toggle summary editing.
   useEffect(() => {
     if (!editor) return;
     const dom = editor.view.dom;
     const handler = (e: MouseEvent) => {
       const t = e.target as HTMLElement;
+
+      // Mention navigation
       const m = t.closest('[data-type="mention"]') as HTMLElement | null;
       if (m) {
         const id = m.getAttribute('data-id');
         if (id) onOpenRef.current?.(id);
+        return;
+      }
+
+      // Toggle expand/collapse — click anywhere on the summary row except the text itself
+      // (clicking the text will be intercepted by the dblclick handler below to edit it).
+      const summary = t.closest('.pensive-toggle-summary') as HTMLElement | null;
+      if (summary) {
+        const wrap = summary.closest('.pensive-toggle') as HTMLElement | null;
+        if (!wrap) return;
+        e.preventDefault();
+        e.stopPropagation();
+        const pos = editor.view.posAtDOM(wrap, 0);
+        if (pos == null || pos < 0) return;
+        const node = editor.state.doc.nodeAt(pos);
+        if (!node || node.type.name !== 'toggle') return;
+        editor.view.dispatch(
+          editor.state.tr.setNodeMarkup(pos, undefined, { ...node.attrs, open: !node.attrs.open })
+        );
+      }
+    };
+    const dblHandler = (e: MouseEvent) => {
+      const t = e.target as HTMLElement;
+      const textEl = t.closest('.pensive-toggle-summary-text') as HTMLElement | null;
+      if (!textEl) return;
+      e.preventDefault();
+      e.stopPropagation();
+      const wrap = textEl.closest('.pensive-toggle') as HTMLElement | null;
+      if (!wrap) return;
+      const pos = editor.view.posAtDOM(wrap, 0);
+      if (pos == null || pos < 0) return;
+      const node = editor.state.doc.nodeAt(pos);
+      if (!node || node.type.name !== 'toggle') return;
+      const next = window.prompt('Toggle summary', node.attrs.summary ?? '');
+      if (next != null) {
+        editor.view.dispatch(
+          editor.state.tr.setNodeMarkup(pos, undefined, { ...node.attrs, summary: next })
+        );
       }
     };
     dom.addEventListener('click', handler);
-    return () => dom.removeEventListener('click', handler);
+    dom.addEventListener('dblclick', dblHandler);
+    return () => {
+      dom.removeEventListener('click', handler);
+      dom.removeEventListener('dblclick', dblHandler);
+    };
+  }, [editor]);
+
+  // Right-click context menu when inside a table.
+  const [tableCtx, setTableCtx] = useState<{ x: number; y: number } | null>(null);
+  useEffect(() => {
+    if (!editor) return;
+    const dom = editor.view.dom;
+    const onCtx = (e: MouseEvent) => {
+      const t = e.target as HTMLElement;
+      if (t.closest('table')) {
+        e.preventDefault();
+        // Place cursor where the user clicked so the next command targets that cell.
+        const pos = editor.view.posAtCoords({ left: e.clientX, top: e.clientY });
+        if (pos) editor.commands.setTextSelection(pos.pos);
+        setTableCtx({ x: e.clientX, y: e.clientY });
+      }
+    };
+    const onDocClick = () => setTableCtx(null);
+    dom.addEventListener('contextmenu', onCtx);
+    document.addEventListener('click', onDocClick);
+    document.addEventListener('scroll', onDocClick, true);
+    return () => {
+      dom.removeEventListener('contextmenu', onCtx);
+      document.removeEventListener('click', onDocClick);
+      document.removeEventListener('scroll', onDocClick, true);
+    };
   }, [editor]);
 
   // Resolve <img data-attachment-id> → blob URL after every render.
@@ -319,6 +389,36 @@ export function NoteEditor({
             <button onClick={() => onAICommand('improve', editor)} title="Improve writing"><Sparkles className="w-3.5 h-3.5" /></button>
           )}
         </BubbleMenu>
+      )}
+      {editor && (
+        <BubbleMenu
+          editor={editor}
+          shouldShow={({ editor: ed }) => ed.isActive('table')}
+          className="pensive-bubble-menu pensive-table-bubble"
+          options={{ placement: 'top' as any }}
+        >
+          <button title="Insert row above" onClick={() => editor.chain().focus().addRowBefore().run()}>＋↑</button>
+          <button title="Insert row below" onClick={() => editor.chain().focus().addRowAfter().run()}>＋↓</button>
+          <button title="Delete row" onClick={() => editor.chain().focus().deleteRow().run()}>−Row</button>
+          <span className="pensive-bubble-sep" />
+          <button title="Insert column left" onClick={() => editor.chain().focus().addColumnBefore().run()}>＋←</button>
+          <button title="Insert column right" onClick={() => editor.chain().focus().addColumnAfter().run()}>＋→</button>
+          <button title="Delete column" onClick={() => editor.chain().focus().deleteColumn().run()}>−Col</button>
+          <span className="pensive-bubble-sep" />
+          <button title="Toggle header row" onClick={() => editor.chain().focus().toggleHeaderRow().run()}>H</button>
+          <button title="Merge / split cells" onClick={() => editor.chain().focus().mergeOrSplit().run()}>⊟</button>
+          <button title="Delete table" onClick={() => editor.chain().focus().deleteTable().run()} className="text-rose-500 dark:text-rose-400"><TableIcon className="w-3.5 h-3.5" />×</button>
+        </BubbleMenu>
+      )}
+      {editor && tableCtx && (
+        <div
+          className="fixed z-[60]"
+          style={{ left: tableCtx.x, top: tableCtx.y }}
+          onClick={e => e.stopPropagation()}
+          onContextMenu={e => e.preventDefault()}
+        >
+          <TableMenu editor={editor} onClose={() => setTableCtx(null)} />
+        </div>
       )}
     </>
   );

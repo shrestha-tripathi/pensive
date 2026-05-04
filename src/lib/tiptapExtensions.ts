@@ -72,17 +72,25 @@ export const Toggle = Node.create({
     };
   },
   parseHTML() {
-    return [{ tag: 'details[data-toggle]' }];
+    return [
+      { tag: 'div[data-toggle]' },
+      { tag: 'details[data-toggle]' }, // back-compat with old saved notes
+    ];
   },
   renderHTML({ HTMLAttributes, node }) {
     return [
-      'details',
+      'div',
       mergeAttributes(HTMLAttributes, {
         'data-toggle': '',
-        open: node.attrs.open ? '' : undefined,
-        class: 'pensive-toggle',
+        'data-open': node.attrs.open ? 'true' : 'false',
+        class: `pensive-toggle ${node.attrs.open ? 'is-open' : 'is-closed'}`,
       }),
-      ['summary', { class: 'pensive-toggle-summary' }, node.attrs.summary],
+      [
+        'div',
+        { class: 'pensive-toggle-summary', contenteditable: 'false' },
+        ['span', { class: 'pensive-toggle-chevron' }, '▶'],
+        ['span', { class: 'pensive-toggle-summary-text' }, node.attrs.summary],
+      ],
       ['div', { class: 'pensive-toggle-body' }, 0],
     ];
   },
@@ -96,6 +104,21 @@ export const Toggle = Node.create({
             attrs: { summary: 'Toggle', open: true },
             content: [{ type: 'paragraph' }],
           }),
+      toggleToggleOpen:
+        () =>
+        ({ state, dispatch }: any) => {
+          const { selection, tr } = state;
+          // Find nearest enclosing toggle node and flip its open attr.
+          for (let depth = selection.$from.depth; depth >= 0; depth--) {
+            const node = selection.$from.node(depth);
+            if (node.type.name === 'toggle') {
+              const pos = selection.$from.before(depth);
+              if (dispatch) dispatch(tr.setNodeMarkup(pos, undefined, { ...node.attrs, open: !node.attrs.open }));
+              return true;
+            }
+          }
+          return false;
+        },
     } as any;
   },
 });
