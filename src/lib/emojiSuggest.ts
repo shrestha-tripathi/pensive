@@ -1,6 +1,9 @@
 import { Extension } from '@tiptap/core';
+import { PluginKey } from '@tiptap/pm/state';
 import Suggestion, { type SuggestionOptions } from '@tiptap/suggestion';
 import { searchEmoji, type EmojiEntry } from './emojiData';
+
+const emojiPluginKey = new PluginKey('emojiSuggest');
 
 /** `:smile` style autocomplete that inserts the emoji glyph as plain text. */
 export const EmojiSuggest = Extension.create<{ render: () => any }>({
@@ -13,6 +16,7 @@ export const EmojiSuggest = Extension.create<{ render: () => any }>({
       Suggestion({
         editor: this.editor,
         char: ':',
+        pluginKey: emojiPluginKey,
         startOfLine: false,
         allowSpaces: false,
         // Don't trigger on `::` or inside URLs/code etc. — Suggestion's default
