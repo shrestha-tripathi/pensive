@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Sparkles, Send, X, Loader2, ArrowUpRight, AlertTriangle } from 'lucide-react';
 import { searchSimilar, type SearchHit } from '../lib/vectorIndex';
-import { isWebGpuAvailable, streamChat, type ChatMsg } from '../lib/llm';
+import { isWebGpuAvailable, isWebGpuUsable, streamChat, type ChatMsg } from '../lib/llm';
 import type { Note } from '../lib/db';
 
 interface Citation extends SearchHit { title: string }
@@ -32,7 +32,11 @@ export function ChatPanel({ open, onClose, notes, onJumpToNote }: Props) {
   const [busy, setBusy] = useState(false);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
-  const webgpu = useMemo(() => isWebGpuAvailable(), []);
+  const [webgpu, setWebgpu] = useState<boolean>(isWebGpuAvailable());
+  useEffect(() => {
+    // Real adapter probe — overrides the optimistic sync check above.
+    isWebGpuUsable().then(setWebgpu);
+  }, []);
 
   useEffect(() => {
     if (open) setTimeout(() => inputRef.current?.focus(), 50);
