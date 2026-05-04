@@ -56,14 +56,24 @@ export function useTranscriber(settings: TranscriberSettings) {
   }, [settings.model]);
 
   const startRecording = useCallback(async () => {
-    setState(s => ({ ...s, status: 'recording', message: 'Recording…' }));
-    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-    streamRef.current = stream;
-    const mr = new MediaRecorder(stream);
-    chunksRef.current = [];
-    mr.ondataavailable = e => { if (e.data.size > 0) chunksRef.current.push(e.data); };
-    mr.start();
-    mediaRef.current = mr;
+    // Acquire mic FIRST; only flip to 'recording' on success so a denied permission
+    // doesn't strand the UI in a recording state forever.
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      streamRef.current = stream;
+      const mr = new MediaRecorder(stream);
+      chunksRef.current = [];
+      mr.ondataavailable = e => { if (e.data.size > 0) chunksRef.current.push(e.data); };
+      mr.start();
+      mediaRef.current = mr;
+      setState({ status: 'recording', progress: 0, message: 'Recording…' });
+    } catch (e: any) {
+      const msg = e?.name === 'NotAllowedError' ? 'Microphone permission denied'
+        : e?.name === 'NotFoundError' ? 'No microphone found on this device'
+        : (e?.message ?? String(e));
+      setState({ status: 'error', progress: 0, message: '', error: msg });
+      throw new Error(msg);
+    }
   }, []);
 
   const stopAndTranscribe = useCallback(async (): Promise<string> => {

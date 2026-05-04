@@ -125,8 +125,11 @@ export function useMeetingRecorder(model: string, onChunk?: (text: string) => vo
       mrRef.current = mr;
       setState(s => ({ ...s, status: 'recording' }));
     } catch (e: any) {
-      setState({ status: 'error', transcript: '', chunkCount: 0, error: e?.message ?? String(e) });
-      throw e;
+      const msg = e?.name === 'NotAllowedError' ? 'Microphone permission denied'
+        : e?.name === 'NotFoundError' ? 'No microphone found on this device'
+        : (e?.message ?? String(e));
+      setState({ status: 'error', transcript: '', chunkCount: 0, error: msg });
+      throw new Error(msg);
     }
   }, [transcribeChunk]);
 

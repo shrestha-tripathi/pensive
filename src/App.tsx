@@ -494,15 +494,25 @@ export function App() {
   }, [toast]);
 
   const startMic = useCallback(async () => {
-    try { await transcriber.startRecording(); } catch (e) { console.error(e); }
-  }, [transcriber]);
+    try {
+      await transcriber.startRecording();
+    } catch (e: any) {
+      toast.error('Could not start mic', e?.message ?? String(e));
+    }
+  }, [transcriber, toast]);
 
   const stopMic = useCallback(async () => {
-    const text = await transcriber.stopAndTranscribe();
-    if (text && editorRef.current) {
-      editorRef.current.chain().focus().insertContent(text + ' ').run();
+    try {
+      const text = await transcriber.stopAndTranscribe();
+      if (text && editorRef.current) {
+        editorRef.current.chain().focus().insertContent(text + ' ').run();
+      } else if (!text) {
+        toast.info('No speech detected', 'Try speaking a bit longer or check your mic.');
+      }
+    } catch (e: any) {
+      toast.error('Transcription failed', e?.message ?? String(e));
     }
-  }, [transcriber]);
+  }, [transcriber, toast]);
 
   const startMeeting = useCallback(async () => {
     try {
