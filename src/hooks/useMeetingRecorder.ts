@@ -54,9 +54,17 @@ async function getPipeline(model: string) {
       const tf = await import('@huggingface/transformers');
       tf.env.allowRemoteModels = true;
       tf.env.allowLocalModels = false;
-      let device: 'webgpu' | 'wasm' = 'wasm';
-      try { if ((navigator as any).gpu) device = 'webgpu'; } catch {}
-      return tf.pipeline('automatic-speech-recognition', model, { device } as any);
+      const { pickDevice } = await import('../lib/capabilities');
+      const device = await pickDevice();
+      try {
+        return await tf.pipeline('automatic-speech-recognition', model, { device } as any);
+      } catch (e) {
+        if (device === 'webgpu') {
+          console.warn('[meeting] WebGPU init failed, falling back to wasm', e);
+          return tf.pipeline('automatic-speech-recognition', model, { device: 'wasm' } as any);
+        }
+        throw e;
+      }
     })();
   }
   return pipelinePromise;

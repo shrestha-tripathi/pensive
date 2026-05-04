@@ -11,11 +11,16 @@ async function getPipeline(): Promise<FeatureExtractionPipeline> {
   if (pipelinePromise) return pipelinePromise;
   pipelinePromise = (async () => {
     const tx = await import('@huggingface/transformers');
+    const { pickDevice } = await import('./capabilities');
+    const device = await pickDevice();
     try {
-      return (await tx.pipeline('feature-extraction', MODEL, { device: 'webgpu' as any })) as any;
+      return (await tx.pipeline('feature-extraction', MODEL, { device: device as any })) as any;
     } catch (e) {
-      console.warn('[embeddings] WebGPU init failed, falling back to wasm', e);
-      return (await tx.pipeline('feature-extraction', MODEL, { device: 'wasm' as any })) as any;
+      if (device === 'webgpu') {
+        console.warn('[embeddings] WebGPU init failed, falling back to wasm', e);
+        return (await tx.pipeline('feature-extraction', MODEL, { device: 'wasm' as any })) as any;
+      }
+      throw e;
     }
   })();
   return pipelinePromise;

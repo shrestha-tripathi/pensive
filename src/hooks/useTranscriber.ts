@@ -28,22 +28,27 @@ export function useTranscriber(settings: TranscriberSettings) {
     const tf = await import('@huggingface/transformers');
     tf.env.allowRemoteModels = true;
     tf.env.allowLocalModels = false;
-    let device: 'webgpu' | 'wasm' = 'wasm';
+    const { pickDevice } = await import('../lib/capabilities');
+    const device = await pickDevice();
+    const progress_callback = (p: any) => {
+      if (p?.status === 'progress') {
+        const pct = Math.round(p.progress ?? 0);
+        setState({ status: 'loading', progress: pct, message: `Loading model ${pct}%` });
+      } else if (p?.status === 'ready') {
+        setState({ status: 'ready', progress: 100, message: 'Model ready' });
+      }
+    };
+    let pl: any;
     try {
-      // @ts-ignore
-      if (typeof navigator !== 'undefined' && (navigator as any).gpu) device = 'webgpu';
-    } catch {}
-    const pl = await tf.pipeline('automatic-speech-recognition', settings.model, {
-      device,
-      progress_callback: (p: any) => {
-        if (p?.status === 'progress') {
-          const pct = Math.round(p.progress ?? 0);
-          setState({ status: 'loading', progress: pct, message: `Loading model ${pct}%` });
-        } else if (p?.status === 'ready') {
-          setState({ status: 'ready', progress: 100, message: 'Model ready' });
-        }
-      },
-    } as any);
+      pl = await tf.pipeline('automatic-speech-recognition', settings.model, { device, progress_callback } as any);
+    } catch (e) {
+      if (device === 'webgpu') {
+        console.warn('[transcriber] WebGPU init failed, falling back to wasm', e);
+        pl = await tf.pipeline('automatic-speech-recognition', settings.model, { device: 'wasm', progress_callback } as any);
+      } else {
+        throw e;
+      }
+    }
     pipelineRef.current = pl;
     loadedModelRef.current = settings.model;
     setState({ status: 'ready', progress: 100, message: 'Model ready' });

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, lazy, Suspense } from 'react';
-import { Download, Lock, Sparkles, Star, ChevronRight, Archive, Network, Menu, Mic, Square, CreditCard } from 'lucide-react';
+import { Download, Lock, Sparkles, Star, ChevronRight, Archive, Network, Menu, Mic, MicOff, Square, CreditCard } from 'lucide-react';
 import type { Editor } from '@tiptap/react';
 import { NoteEditor } from './components/Editor';
 import { Sidebar } from './components/Sidebar';
@@ -34,6 +34,7 @@ import { indexNote, reindexStale } from './lib/vectorIndex';
 import { computeAutoTags } from './lib/autoTags';
 import { streamChat } from './lib/llm';
 import { useMeetingRecorder } from './hooks/useMeetingRecorder';
+import { getAudioCapabilities } from './lib/capabilities';
 import { Pricing } from './components/Pricing';
 
 const RECENT_KEY = 'pensive-recent-v1';
@@ -71,6 +72,7 @@ export function App() {
   const editorRef = useRef<Editor | null>(null);
   const transcriber = useTranscriber(tSettings);
   const meeting = useMeetingRecorder(tSettings.model);
+  const audioCaps = useMemo(() => getAudioCapabilities(), []);
   const saveTimer = useRef<number | null>(null);
   const meetingStartRef = useRef<number>(0);
 
@@ -498,10 +500,14 @@ export function App() {
             ) : (
               <button
                 onClick={startMeeting}
-                className="flex items-center gap-1.5 text-xs px-2.5 py-1.5 rounded-md border border-warm-200 dark:border-[#26262b] hover:bg-warm-100 dark:hover:bg-[#1c1c20] text-warm-700 dark:text-warm-300 transition"
-                title="Start meeting (long-form recording + AI summary)"
+                disabled={!audioCaps.supported}
+                className="flex items-center gap-1.5 text-xs px-2.5 py-1.5 rounded-md border border-warm-200 dark:border-[#26262b] hover:bg-warm-100 dark:hover:bg-[#1c1c20] text-warm-700 dark:text-warm-300 transition disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-transparent"
+                title={audioCaps.supported ? 'Start meeting (long-form recording + AI summary)' : `Meeting recording unavailable — ${audioCaps.reason ?? 'browser does not support audio capture.'}`}
               >
-                <Mic className="w-3.5 h-3.5" /> <span className="hidden sm:inline">Meeting</span>
+                {audioCaps.supported
+                  ? <Mic className="w-3.5 h-3.5" />
+                  : <MicOff className="w-3.5 h-3.5" />}
+                <span className="hidden sm:inline">Meeting</span>
               </button>
             )}
             {active && (
