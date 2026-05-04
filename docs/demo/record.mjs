@@ -29,23 +29,23 @@ const GIF_DIR = join(ROOT, 'docs', 'screenshots');
 const URL = process.env.PENSIVE_URL || 'https://shrestha-tripathi.github.io/pensive/';
 
 const VIEWPORT = { width: 1280, height: 720 };
-const FPS = 12;        // GIF frame rate — 10–15 is the sweet spot
+const FPS = 15;        // GIF frame rate — 15 = smoother than 12, still small files
 const MAX_WIDTH = 960; // GIF width cap for README
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
 const sleep = (ms) => new Promise(r => setTimeout(r, ms));
 
-async function typeSlowly(page, selector, text, perChar = 35) {
+async function typeSlowly(page, selector, text, perChar = 22) {
   await page.click(selector);
   for (const ch of text) {
     await page.keyboard.type(ch, { delay: perChar });
   }
 }
 
-async function moveTo(page, ref, hover = 250) {
+async function moveTo(page, ref, hover = 150) {
   const box = await ref.boundingBox();
   if (!box) return;
-  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2, { steps: 18 });
+  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2, { steps: 14 });
   await sleep(hover);
 }
 
@@ -106,63 +106,68 @@ async function seed(page) {
 
   console.log('▶ Loading', URL);
   await page.goto(URL, { waitUntil: 'networkidle' });
-  await sleep(800);
+  await sleep(400);
 
   console.log('▶ Seeding sample notes');
   await seed(page);
   await page.reload({ waitUntil: 'networkidle' });
-  await sleep(1000);
+  await sleep(600);
 
-  // ── SCENE 1: Click into the roadmap note (1.5s) ───────────────────────────
+  // ── SCENE 1: Click into the roadmap note (~1.2 s) ────────────────────────
   console.log('▶ Scene 1: open a note');
   const roadmap = page.locator('text=Q4 product roadmap').first();
-  await moveTo(page, roadmap, 200);
+  await moveTo(page, roadmap, 100);
   await roadmap.click();
-  await sleep(1200);
+  await sleep(700);
 
-  // ── SCENE 2: Type into the editor (3s) ────────────────────────────────────
+  // ── SCENE 2: Type into the editor (~2.5 s) ───────────────────────────────
   console.log('▶ Scene 2: type in editor');
   const editor = page.locator('.ProseMirror').first();
   await editor.click();
   await page.keyboard.press('End');
   await page.keyboard.press('Enter');
-  await typeSlowly(page, '.ProseMirror', 'Pensive runs entirely on this device — no servers, no accounts.', 30);
-  await sleep(800);
+  await typeSlowly(page, '.ProseMirror', 'Notes that never leave your device.', 22);
+  await sleep(400);
 
-  // ── SCENE 3: Open the Knowledge Graph (3s) ────────────────────────────────
+  // ── SCENE 3: Knowledge Graph (~3.5 s) ────────────────────────────────────
   console.log('▶ Scene 3: knowledge graph');
-  const graphBtn = page.locator('button[title*="graph" i], button:has-text("Graph")').first();
+  const graphBtn = page.locator('button:has-text("Graph")').first();
   if (await graphBtn.count()) {
-    await moveTo(page, graphBtn, 200);
+    await moveTo(page, graphBtn, 100);
     await graphBtn.click();
-    await sleep(2200);
+    await sleep(1700); // let force layout settle
+    // Hover a node so the link highlight + tooltip appear in the GIF
+    const center = { x: VIEWPORT.width / 2, y: VIEWPORT.height / 2 };
+    await page.mouse.move(center.x, center.y, { steps: 12 });
+    await sleep(250);
+    // Sweep gently to land on a node
+    await page.mouse.move(center.x + 60, center.y + 40, { steps: 18 });
+    await sleep(900);
     const closeGraph = page.locator('button[title="Close"]').first();
     await closeGraph.click();
-    await sleep(500);
+    await sleep(300);
   }
 
-  // ── SCENE 4: Open Settings → highlight Import (2.5s) ──────────────────────
+  // ── SCENE 4: Settings → Import workspace ZIP (~2.5 s) ────────────────────
   console.log('▶ Scene 4: settings + import');
   const settingsBtn = page.locator('button[aria-label="Settings"]').first();
-  await moveTo(page, settingsBtn, 200);
+  await moveTo(page, settingsBtn, 100);
   await settingsBtn.click();
-  await sleep(1200);
+  await sleep(700);
   const importBtn = page.locator('button:has-text("Import workspace ZIP")').first();
   if (await importBtn.count()) {
-    await moveTo(page, importBtn, 800);
+    await moveTo(page, importBtn, 700);
   }
-  await sleep(600);
   await page.keyboard.press('Escape');
-  await sleep(600);
+  await sleep(300);
 
-  // ── SCENE 5: Hover the export ZIP button (1s) ─────────────────────────────
+  // ── SCENE 5: ZIP export (~1 s) ───────────────────────────────────────────
   console.log('▶ Scene 5: ZIP export');
   const zipBtn = page.locator('button:has-text("ZIP")').first();
   if (await zipBtn.count()) {
-    await moveTo(page, zipBtn, 1000);
+    await moveTo(page, zipBtn, 700);
   }
-
-  await sleep(800);
+  await sleep(500);
 
   // ── Stop & save ───────────────────────────────────────────────────────────
   await ctx.close();
