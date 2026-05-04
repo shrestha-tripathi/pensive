@@ -17,7 +17,7 @@ import Link from '@tiptap/extension-link';
 import Typography from '@tiptap/extension-typography';
 import { CodeBlockLowlight } from '@tiptap/extension-code-block-lowlight';
 import { common, createLowlight } from 'lowlight';
-import DragHandle from '@tiptap/extension-drag-handle-react';
+// DragHandle removed — see comment in JSX below.
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { SlashCommands, type SlashItem } from '../lib/slashCommands';
@@ -30,7 +30,7 @@ import { MentionMenu } from './MentionMenu';
 import { TableMenu } from './TableMenu';
 import { LinkBubble } from './LinkBubble';
 import type { Note } from '../lib/db';
-import { Bold, Italic, Code, Highlighter, Sparkles, Table as TableIcon, GripVertical, Plus, Link as LinkIcon } from 'lucide-react';
+import { Bold, Italic, Code, Highlighter, Sparkles, Table as TableIcon, Plus, Link as LinkIcon } from 'lucide-react';
 
 const lowlight = createLowlight(common);
 
@@ -446,19 +446,9 @@ export function NoteEditor({
     <>
       <EditorContent editor={editor} className="px-2" />
 
-      {/* ⋮⋮ drag handle that follows the hovered block (Notion-style) */}
-      {editor && (
-        <DragHandle editor={editor} className="pensive-drag-handle">
-          <button
-            type="button"
-            title="Drag to move · click for menu"
-            aria-label="Drag block"
-            className="p-1 rounded hover:bg-warm-100 dark:hover:bg-[#26262b] text-warm-500 cursor-grab active:cursor-grabbing"
-          >
-            <GripVertical className="w-4 h-4" />
-          </button>
-        </DragHandle>
-      )}
+      {/* DragHandle removed — @tiptap/extension-drag-handle-react had a
+         lifecycle bug with React 18 (race-condition removeChild crash on
+         editor re-render). Slash menu (`/`) covers block insertion. */}
 
       {/* Floating "+" on empty lines */}
       {editor && (
