@@ -409,3 +409,63 @@ mark { background: #FEF08A; padding: 0 2px; border-radius: 2px; }
 .dark .hljs-built_in, .dark .hljs-builtin-name, .dark .hljs-attribute { color: #ffa657; }
 .dark .hljs-regexp, .dark .hljs-template-tag { color: #a5d6ff; }
 .dark .hljs-variable, .dark .hljs-template-variable { color: #ffa657; }
+
+/* ── Global pointer-cursor feedback ─────────────────────────────────────── */
+/* Every clickable thing gets the hand cursor. ProseMirror content stays text-cursor. */
+button,
+a,
+[role="button"],
+[role="link"],
+[role="menuitem"],
+[role="tab"],
+[role="option"],
+summary,
+label[for],
+input[type="checkbox"],
+input[type="radio"],
+input[type="submit"],
+input[type="reset"],
+input[type="button"],
+select,
+.cursor-target {
+  cursor: pointer;
+}
+
+/* Disabled elements should look it. */
+button:disabled,
+a[aria-disabled="true"],
+[role="button"][aria-disabled="true"],
+input:disabled,
+select:disabled {
+  cursor: not-allowed;
+}
+
+/* Tiptap / ProseMirror surfaces stay text-edit. */
+.ProseMirror,
+.ProseMirror * {
+  cursor: text;
+}
+.ProseMirror a,
+.ProseMirror button,
+.ProseMirror [data-type="taskItem"] > label > input,
+.ProseMirror summary {
+  cursor: pointer;
+}
+
+/* Drag handles & resize affordances. */
+[data-drag-handle],
+.drag-handle,
+.tiptap-drag-handle {
+  cursor: grab;
+}
+[data-drag-handle]:active,
+.drag-handle:active {
+  cursor: grabbing;
+}
+.column-resize-handle,
+[data-resize-handle] {
+  cursor: col-resize;
+}
+
+/* Card-style clickable containers can opt in via class. */
+.clickable { cursor: pointer; }
