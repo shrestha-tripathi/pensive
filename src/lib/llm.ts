@@ -29,10 +29,20 @@ export async function getEngine(onProgress?: (p: LoadProgress) => void): Promise
     enginePromise = (async () => {
       try {
         const webllm = await import('@mlc-ai/web-llm');
+        // Use IndexedDB cache (more persistent than the default Cache Storage API,
+        // which Chrome evicts aggressively under disk pressure).
         const engine = await webllm.CreateMLCEngine(LLM_MODEL, {
           initProgressCallback: (r: any) =>
             onProgress?.({ progress: r.progress ?? 0, text: r.text ?? '' }),
-        });
+          useIndexedDBCache: true,
+        } as any);
+        // Ask the browser to make this storage persistent so it survives eviction.
+        try {
+          if (navigator.storage?.persist) {
+            const persisted = await navigator.storage.persisted();
+            if (!persisted) await navigator.storage.persist();
+          }
+        } catch {}
         return engine;
       } catch (e: any) {
         // Reset so user can retry on a transient network failure.
