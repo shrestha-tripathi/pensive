@@ -21,8 +21,6 @@ import DragHandle from '@tiptap/extension-drag-handle-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { SlashCommands, type SlashItem } from '../lib/slashCommands';
-import { EmojiSuggest } from '../lib/emojiSuggest';
-import { EmojiSuggestMenu } from './EmojiSuggestMenu';
 import { EmojiPicker } from './EmojiPicker';
 import { Callout, Toggle, AttachmentImage } from '../lib/tiptapExtensions';
 import { storeImage } from '../lib/images';
@@ -268,11 +266,6 @@ export function NoteEditor({
         items: slashItems,
         render: makePopupRender(({ ref, items, command }: any) => (
           <SlashMenu ref={ref} items={items} command={(it: SlashItem) => command(it)} />
-        )),
-      }),
-      EmojiSuggest.configure({
-        render: makePopupRender(({ ref, items, command }: any) => (
-          <EmojiSuggestMenu ref={ref} items={items} command={(it: any) => command(it)} />
         )),
       }),
     ],
