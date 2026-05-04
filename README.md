@@ -13,7 +13,9 @@ A **local-first**, fully offline note-taking app with on-device AI. Speak into i
 🔗 **Live demo:** https://shrestha-tripathi.github.io/pensive/
 
 <p align="center">
-  <img src="docs/screenshots/01-editor.png" alt="Pensive editor with sidebar, tags, and related notes" width="900"/>
+  <img src="docs/screenshots/demo.gif" alt="Pensive demo: open a note, type, knowledge graph, settings, ZIP export" width="900"/>
+  <br/>
+  <sub><i>Open a note → edit → knowledge graph → import/export ZIP — all running locally in the browser.</i></sub>
 </p>
 
 ---
@@ -166,7 +168,6 @@ The exported ZIP contains:
 - Templates & daily notes.
 - Plugin SDK.
 - Whisper-large + Llama-3 model upgrades.
-- A proper demo GIF (recorded with the [Playwright recorder in `docs/demo/`](docs/demo/)) — _PRs welcome._
 
 ---
 
