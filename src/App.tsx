@@ -638,7 +638,7 @@ export function App() {
           </div>
         </div>
 
-        <footer className="border-t border-warm-200 dark:border-[#1f1f23] px-6 py-3 flex items-center justify-between gap-4 bg-warm-100/40 dark:bg-[#141417]">
+        <footer className="border-t border-warm-200 dark:border-[#1f1f23] px-6 py-3 flex items-center justify-between gap-4 bg-warm-100 dark:bg-[#141417]">
           <MicButton
             status={transcriber.state.status}
             message={transcriber.state.message}

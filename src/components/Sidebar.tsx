@@ -242,7 +242,7 @@ export function Sidebar(p: Props) {
   }, [menu, closeMenu]);
 
   return (
-    <aside className="w-[280px] shrink-0 h-full border-r border-warm-200 dark:border-[#1f1f23] flex flex-col bg-warm-100/40 dark:bg-[#141417]">
+    <aside className="w-[280px] shrink-0 h-full border-r border-warm-200 dark:border-[#1f1f23] flex flex-col bg-warm-100 dark:bg-[#141417]">
       <div className="px-4 py-4 flex items-center gap-2">
         <FeatherMark size={32} />
         <div className="flex-1">
