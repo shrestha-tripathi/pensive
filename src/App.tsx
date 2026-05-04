@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, lazy, Suspense } from 'react';
-import { Download, Lock, Sparkles, Star, ChevronRight, Archive, Network, Menu, Mic, MicOff, Square, CreditCard } from 'lucide-react';
+import { Download, Upload, FilePlus, FileInput, Lock, Sparkles, Star, ChevronRight, Archive, Network, Menu, Mic, MicOff, Square, CreditCard } from 'lucide-react';
 import type { Editor } from '@tiptap/react';
 import { NoteEditor } from './components/Editor';
 import { ErrorBoundary } from './components/ErrorBoundary';
@@ -61,6 +61,8 @@ export function App() {
   const [pricingOpen, setPricingOpen] = useState(false);
   const [meetingElapsed, setMeetingElapsed] = useState(0);
   const [meetingSummarizing, setMeetingSummarizing] = useState(false);
+  const [mdImportPending, setMdImportPending] = useState<{ title: string; doc: any } | null>(null);
+  const mdFileInputRef = useRef<HTMLInputElement>(null);
   const [recent, setRecent] = useState<string[]>(loadRecent);
   const [tSettings, setTSettings] = useState<TranscriberSettings>(() => {
     try {
@@ -295,6 +297,64 @@ export function App() {
     a.click();
     URL.revokeObjectURL(url);
   }, [active]);
+
+  // Trigger the file picker. Result handled in onChange below.
+  const handleImportMarkdownClick = useCallback(() => {
+    mdFileInputRef.current?.click();
+  }, []);
+
+  const handleMarkdownFileChosen = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = ''; // reset so picking the same file again still fires onChange
+    if (!file) return;
+    try {
+      const text = await file.text();
+      const { markdownToTiptapJson } = await import('./lib/markdownImport');
+      const parsed = markdownToTiptapJson(text);
+      // Fall back to filename if markdown had no leading H1.
+      const title = parsed.title || file.name.replace(/\.(md|markdown|txt)$/i, '').replace(/[-_]+/g, ' ').trim() || 'Imported note';
+      setMdImportPending({ title, doc: parsed.doc });
+    } catch (err: any) {
+      toast.error('Could not read markdown file', err?.message ?? String(err));
+    }
+  }, [toast]);
+
+  const handleMarkdownImportInsert = useCallback(() => {
+    if (!mdImportPending || !editorRef.current) {
+      setMdImportPending(null);
+      return;
+    }
+    try {
+      // Insert the doc's content (skip the wrapping doc node).
+      const content = mdImportPending.doc?.content ?? [];
+      editorRef.current.chain().focus().insertContent(content).run();
+      toast.success('Markdown inserted', `“${mdImportPending.title}” appended to current page`);
+    } catch (err: any) {
+      toast.error('Insert failed', err?.message ?? String(err));
+    } finally {
+      setMdImportPending(null);
+    }
+  }, [mdImportPending, toast]);
+
+  const handleMarkdownImportNewPage = useCallback(async () => {
+    if (!mdImportPending) return;
+    try {
+      const order = nextRootOrder();
+      const n = newNote(null, order);
+      n.title = mdImportPending.title;
+      n.content = mdImportPending.doc;
+      n.plainText = extractText(mdImportPending.doc);
+      await putNote(n);
+      setNotes(prev => [...prev, n]);
+      setActiveId(n.id);
+      const title = mdImportPending.title;
+      setMdImportPending(null);
+      toast.success('Page created', `“${title}” imported as a new page`);
+    } catch (err: any) {
+      toast.error('Could not create page', err?.message ?? String(err));
+      setMdImportPending(null);
+    }
+  }, [mdImportPending, nextRootOrder, toast]);
 
   const handleExportZip = useCallback(async () => {
     const { default: JSZip } = await import('jszip');
@@ -581,6 +641,13 @@ export function App() {
               <Download className="w-3.5 h-3.5" /> .md
             </button>
             <button
+              onClick={handleImportMarkdownClick}
+              className="flex items-center gap-1.5 text-xs px-2.5 py-1.5 rounded-md border border-warm-200 dark:border-[#26262b] hover:bg-warm-100 dark:hover:bg-[#1c1c20] text-warm-700 dark:text-warm-300 transition"
+              title="Import a .md file"
+            >
+              <Upload className="w-3.5 h-3.5" /> Import .md
+            </button>
+            <button
               onClick={handleExportZip}
               className="flex items-center gap-1.5 text-xs px-2.5 py-1.5 rounded-md border border-warm-200 dark:border-[#26262b] hover:bg-warm-100 dark:hover:bg-[#1c1c20] text-warm-700 dark:text-warm-300 transition"
               title="Export entire workspace as ZIP"
@@ -709,6 +776,67 @@ export function App() {
           </div>
           <div className="text-[11px] text-warm-600 dark:text-warm-400 max-h-24 overflow-y-auto scrollbar-thin whitespace-pre-wrap">
             {meeting.state.transcript || <span className="italic text-warm-500">Live transcript will appear here as ~30s chunks finish…</span>}
+          </div>
+        </div>
+      )}
+
+      {/* Hidden file input for markdown imports. */}
+      <input
+        ref={mdFileInputRef}
+        type="file"
+        accept=".md,.markdown,.txt,text/markdown,text/plain"
+        className="hidden"
+        onChange={handleMarkdownFileChosen}
+      />
+
+      {/* Markdown import chooser modal */}
+      {mdImportPending && (
+        <div
+          className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4"
+          onClick={() => setMdImportPending(null)}
+        >
+          <div
+            className="w-full max-w-md rounded-xl bg-white dark:bg-[#16161a] border border-warm-200 dark:border-[#26262b] shadow-2xl overflow-hidden"
+            onClick={e => e.stopPropagation()}
+          >
+            <div className="px-5 pt-5 pb-2">
+              <div className="flex items-center gap-2 mb-2">
+                <Upload className="w-5 h-5 text-amethyst-500" />
+                <h3 className="text-lg font-semibold">Import markdown</h3>
+              </div>
+              <p className="text-sm text-warm-500 mb-1">
+                Detected title: <span className="font-medium text-warm-700 dark:text-warm-300">{mdImportPending.title}</span>
+              </p>
+              <p className="text-sm text-warm-500">How do you want to import it?</p>
+            </div>
+            <div className="px-5 pb-5 pt-3 grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+              <button
+                onClick={handleMarkdownImportNewPage}
+                className="group flex flex-col items-start gap-1.5 p-3 rounded-lg border border-warm-200 dark:border-[#26262b] hover:border-amethyst-400 hover:bg-amethyst-50 dark:hover:bg-amethyst-900/10 transition text-left"
+              >
+                <FilePlus className="w-5 h-5 text-amethyst-500" />
+                <div className="font-medium text-sm">Create new page</div>
+                <div className="text-[11px] text-warm-500 leading-snug">Add as a brand-new page in your workspace.</div>
+              </button>
+              <button
+                onClick={handleMarkdownImportInsert}
+                disabled={!active}
+                className="group flex flex-col items-start gap-1.5 p-3 rounded-lg border border-warm-200 dark:border-[#26262b] hover:border-amethyst-400 hover:bg-amethyst-50 dark:hover:bg-amethyst-900/10 transition text-left disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:border-warm-200 disabled:hover:bg-transparent"
+                title={!active ? 'Open a page first to insert into it' : undefined}
+              >
+                <FileInput className="w-5 h-5 text-amethyst-500" />
+                <div className="font-medium text-sm">Insert into current page</div>
+                <div className="text-[11px] text-warm-500 leading-snug">Append the markdown at the cursor of the open page.</div>
+              </button>
+            </div>
+            <div className="px-5 pb-4 flex justify-end">
+              <button
+                onClick={() => setMdImportPending(null)}
+                className="text-xs text-warm-500 hover:text-warm-700 dark:hover:text-warm-300"
+              >
+                Cancel
+              </button>
+            </div>
           </div>
         </div>
       )}
