@@ -1,5 +1,5 @@
 import { useEditor, EditorContent, type Editor } from '@tiptap/react';
-import { BubbleMenu } from '@tiptap/react/menus';
+import { BubbleMenu, FloatingMenu } from '@tiptap/react/menus';
 import StarterKit from '@tiptap/starter-kit';
 import Placeholder from '@tiptap/extension-placeholder';
 import TaskList from '@tiptap/extension-task-list';
@@ -13,6 +13,11 @@ import { TableCell } from '@tiptap/extension-table-cell';
 import { Details } from '@tiptap/extension-details';
 import { DetailsSummary } from '@tiptap/extension-details-summary';
 import { DetailsContent } from '@tiptap/extension-details-content';
+import Link from '@tiptap/extension-link';
+import Typography from '@tiptap/extension-typography';
+import { CodeBlockLowlight } from '@tiptap/extension-code-block-lowlight';
+import { common, createLowlight } from 'lowlight';
+import DragHandle from '@tiptap/extension-drag-handle-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { SlashCommands, type SlashItem } from '../lib/slashCommands';
@@ -22,8 +27,11 @@ import { attachmentUrl } from '../lib/images';
 import { SlashMenu } from './SlashMenu';
 import { MentionMenu } from './MentionMenu';
 import { TableMenu } from './TableMenu';
+import { LinkBubble } from './LinkBubble';
 import type { Note } from '../lib/db';
-import { Bold, Italic, Code, Highlighter, Sparkles, Table as TableIcon } from 'lucide-react';
+import { Bold, Italic, Code, Highlighter, Sparkles, Table as TableIcon, GripVertical, Plus, Link as LinkIcon } from 'lucide-react';
+
+const lowlight = createLowlight(common);
 
 interface Props {
   noteId: string;
@@ -125,8 +133,8 @@ export function NoteEditor({
       command: (ed, range) => ed.chain().focus().deleteRange(range).setBlockquote().run() },
     { group: 'Basic', title: 'Divider', description: 'Horizontal rule', icon: '—',
       command: (ed, range) => ed.chain().focus().deleteRange(range).setHorizontalRule().run() },
-    { group: 'Basic', title: 'Code block', description: 'Syntax-highlighted code', icon: '</>', keywords: ['code'],
-      command: (ed, range) => { ed.chain().focus().deleteRange(range).run(); onCBRef.current?.(ed); } },
+    { group: 'Basic', title: 'Code block', description: 'Syntax-highlighted code', icon: '</>', keywords: ['code', 'pre'],
+      command: (ed, range) => ed.chain().focus().deleteRange(range).setCodeBlock().run() },
 
     { group: 'Media', title: 'Image', description: 'Upload an image (stored as blob)', icon: '🖼', keywords: ['img', 'photo'],
       command: (ed, range) => {
@@ -199,7 +207,15 @@ export function NoteEditor({
 
   const editor = useEditor({
     extensions: [
-      StarterKit.configure({ heading: { levels: [1, 2, 3] } }),
+      StarterKit.configure({ heading: { levels: [1, 2, 3] }, codeBlock: false }),
+      Typography,
+      CodeBlockLowlight.configure({ lowlight, defaultLanguage: null, HTMLAttributes: { class: 'pensive-code-block' } }),
+      Link.configure({
+        openOnClick: false,
+        autolink: true,
+        linkOnPaste: true,
+        HTMLAttributes: { class: 'pensive-link', rel: 'noopener noreferrer nofollow', target: '_blank' },
+      }),
       Placeholder.configure({
         placeholder: ({ node, pos }) => {
           if (pos === 0 && node.type.name === 'heading') return 'Untitled';
@@ -374,17 +390,90 @@ export function NoteEditor({
   return (
     <>
       <EditorContent editor={editor} className="px-2" />
+
+      {/* ⋮⋮ drag handle that follows the hovered block (Notion-style) */}
       {editor && (
-        <BubbleMenu editor={editor} className="pensive-bubble-menu">
-          <button onClick={() => editor.chain().focus().toggleBold().run()} className={editor.isActive('bold') ? 'active' : ''}><Bold className="w-3.5 h-3.5" /></button>
-          <button onClick={() => editor.chain().focus().toggleItalic().run()} className={editor.isActive('italic') ? 'active' : ''}><Italic className="w-3.5 h-3.5" /></button>
-          <button onClick={() => editor.chain().focus().toggleCode().run()} className={editor.isActive('code') ? 'active' : ''}><Code className="w-3.5 h-3.5" /></button>
-          <button onClick={() => editor.chain().focus().toggleHighlight?.().run()} title="Highlight"><Highlighter className="w-3.5 h-3.5" /></button>
+        <DragHandle editor={editor} className="pensive-drag-handle">
+          <button
+            type="button"
+            title="Drag to move · click for menu"
+            aria-label="Drag block"
+            className="p-1 rounded hover:bg-warm-100 dark:hover:bg-[#26262b] text-warm-500 cursor-grab active:cursor-grabbing"
+          >
+            <GripVertical className="w-4 h-4" />
+          </button>
+        </DragHandle>
+      )}
+
+      {/* Floating "+" on empty lines */}
+      {editor && (
+        <FloatingMenu
+          editor={editor}
+          shouldShow={({ state }) => {
+            const { selection } = state;
+            const { $anchor } = selection;
+            const isEmptyTextBlock = $anchor.parent.isTextblock && !$anchor.parent.textContent;
+            return isEmptyTextBlock && $anchor.parent.type.name === 'paragraph';
+          }}
+          className="pensive-floating-menu"
+        >
+          <button
+            type="button"
+            title="Add a block (or press '/')"
+            onClick={() => editor.chain().focus().insertContent('/').run()}
+            className="p-1 rounded text-warm-500 hover:text-amethyst-600 hover:bg-warm-100 dark:hover:bg-[#26262b] transition"
+          >
+            <Plus className="w-4 h-4" />
+          </button>
+        </FloatingMenu>
+      )}
+
+      {/* Text formatting bubble */}
+      {editor && (
+        <BubbleMenu
+          editor={editor}
+          shouldShow={({ editor: ed, from, to }) => from !== to && !ed.isActive('table') && !ed.isActive('link')}
+          className="pensive-bubble-menu"
+        >
+          <button onClick={() => editor.chain().focus().toggleBold().run()} className={editor.isActive('bold') ? 'active' : ''} title="Bold (⌘B)"><Bold className="w-3.5 h-3.5" /></button>
+          <button onClick={() => editor.chain().focus().toggleItalic().run()} className={editor.isActive('italic') ? 'active' : ''} title="Italic (⌘I)"><Italic className="w-3.5 h-3.5" /></button>
+          <button onClick={() => editor.chain().focus().toggleCode().run()} className={editor.isActive('code') ? 'active' : ''} title="Inline code"><Code className="w-3.5 h-3.5" /></button>
+          <button onClick={() => editor.chain().focus().toggleHighlight?.().run()} className={editor.isActive('highlight') ? 'active' : ''} title="Highlight"><Highlighter className="w-3.5 h-3.5" /></button>
+          <button
+            onClick={() => {
+              const prev = editor.getAttributes('link').href ?? '';
+              const url = window.prompt('Link URL', prev);
+              if (url == null) return;
+              if (url === '') editor.chain().focus().extendMarkRange('link').unsetLink().run();
+              else {
+                const safe = /^[a-z]+:\/\//i.test(url) || url.startsWith('mailto:') ? url : `https://${url}`;
+                editor.chain().focus().extendMarkRange('link').setLink({ href: safe }).run();
+              }
+            }}
+            className={editor.isActive('link') ? 'active' : ''}
+            title="Add link"
+          >
+            <LinkIcon className="w-3.5 h-3.5" />
+          </button>
           {onAICommand && (
             <button onClick={() => onAICommand('improve', editor)} title="Improve writing"><Sparkles className="w-3.5 h-3.5" /></button>
           )}
         </BubbleMenu>
       )}
+
+      {/* Link editor — appears whenever cursor is inside an active link mark */}
+      {editor && (
+        <BubbleMenu
+          editor={editor}
+          shouldShow={({ editor: ed }) => ed.isActive('link')}
+          className="pensive-link-bubble-wrap"
+          options={{ placement: 'bottom' as any }}
+        >
+          <LinkBubble editor={editor} />
+        </BubbleMenu>
+      )}
+
+      {/* Table toolbar */}
       {editor && (
         <BubbleMenu
           editor={editor}
@@ -405,6 +494,8 @@ export function NoteEditor({
           <button title="Delete table" onClick={() => editor.chain().focus().deleteTable().run()} className="text-rose-500 dark:text-rose-400"><TableIcon className="w-3.5 h-3.5" />×</button>
         </BubbleMenu>
       )}
+
+      {/* Right-click context menu for tables */}
       {editor && tableCtx && (
         <div
           className="fixed z-[60]"

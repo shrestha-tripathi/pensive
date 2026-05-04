@@ -174,7 +174,11 @@ body {
   cursor: text;
   margin: 0;
   padding: 2px 0;
+  list-style: none;
 }
+.ProseMirror [data-type="details"] [data-type="detailsSummary"]::-webkit-details-marker,
+.ProseMirror [data-type="details"] [data-type="detailsSummary"]::marker { display: none; content: ''; }
+.ProseMirror [data-type="details"] [data-type="detailsSummary"] > * { display: inline; }
 .ProseMirror [data-type="details"]:not(.is-open) [data-type="detailsContent"] { display: none; }
 .ProseMirror [data-type="details"] [data-type="detailsContent"] {
   border-left: 1px dashed var(--color-warm-200);
@@ -321,3 +325,80 @@ mark { background: #FEF08A; padding: 0 2px; border-radius: 2px; }
 }
 .pensive-meeting-dot { width: 8px; height: 8px; border-radius: 50%;
   background: #ff5b5b; animation: pulse-mic 1.2s ease-in-out infinite; }
+
+/* ── Drag handle (Notion ⋮⋮) ──────────────────────────────────────── */
+.pensive-drag-handle {
+  position: absolute;
+  z-index: 30;
+  opacity: 0;
+  transition: opacity 0.15s;
+  pointer-events: auto;
+}
+.ProseMirror:hover ~ .pensive-drag-handle,
+.pensive-drag-handle:hover { opacity: 1; }
+.pensive-drag-handle button { display: flex; align-items: center; justify-content: center; }
+
+/* ── Floating "+" on empty paragraphs ─────────────────────────────── */
+.pensive-floating-menu {
+  display: flex; align-items: center;
+  background: transparent;
+  pointer-events: auto;
+}
+
+/* ── Links ────────────────────────────────────────────────────────── */
+.ProseMirror a.pensive-link {
+  color: var(--color-amethyst-600);
+  text-decoration: underline;
+  text-decoration-color: rgba(139,92,246,0.4);
+  text-decoration-thickness: 1px;
+  text-underline-offset: 2px;
+  cursor: pointer;
+  transition: color 0.12s;
+}
+.ProseMirror a.pensive-link:hover {
+  color: var(--color-amethyst-700);
+  text-decoration-color: var(--color-amethyst-600);
+}
+.dark .ProseMirror a.pensive-link { color: #C4B5FD; text-decoration-color: rgba(196,181,253,0.5); }
+.dark .ProseMirror a.pensive-link:hover { color: #DDD6FE; text-decoration-color: #C4B5FD; }
+.pensive-link-bubble-wrap { background: transparent; border: 0; box-shadow: none; padding: 0; }
+
+/* ── Code block syntax highlighting (lowlight + GitHub-like theme) ── */
+.ProseMirror pre.pensive-code-block,
+.ProseMirror pre {
+  background: var(--color-warm-100);
+  color: #24292e;
+  border-radius: 6px;
+  padding: 12px 14px;
+  font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 13px;
+  line-height: 1.55;
+  overflow-x: auto;
+  margin: 0.6em 0;
+}
+.dark .ProseMirror pre.pensive-code-block,
+.dark .ProseMirror pre { background: #16161a; color: #e6e6e6; }
+
+/* highlight.js token colors — GitHub-light by default, GitHub-dark in dark mode */
+.hljs-comment, .hljs-quote { color: #6a737d; font-style: italic; }
+.hljs-keyword, .hljs-selector-tag, .hljs-literal, .hljs-section, .hljs-link { color: #d73a49; }
+.hljs-function .hljs-keyword { color: #d73a49; }
+.hljs-subst { color: #24292e; }
+.hljs-string, .hljs-doctag, .hljs-attr { color: #032f62; }
+.hljs-number, .hljs-symbol, .hljs-bullet, .hljs-meta { color: #005cc5; }
+.hljs-title, .hljs-name, .hljs-selector-id, .hljs-selector-class { color: #6f42c1; }
+.hljs-type, .hljs-class .hljs-title, .hljs-tag { color: #22863a; }
+.hljs-built_in, .hljs-builtin-name, .hljs-attribute { color: #e36209; }
+.hljs-regexp, .hljs-template-tag { color: #032f62; }
+.hljs-variable, .hljs-template-variable { color: #e36209; }
+
+.dark .hljs-comment, .dark .hljs-quote { color: #8b949e; }
+.dark .hljs-keyword, .dark .hljs-selector-tag, .dark .hljs-literal, .dark .hljs-section, .dark .hljs-link { color: #ff7b72; }
+.dark .hljs-subst { color: #e6e6e6; }
+.dark .hljs-string, .dark .hljs-doctag, .dark .hljs-attr { color: #a5d6ff; }
+.dark .hljs-number, .dark .hljs-symbol, .dark .hljs-bullet, .dark .hljs-meta { color: #79c0ff; }
+.dark .hljs-title, .dark .hljs-name, .dark .hljs-selector-id, .dark .hljs-selector-class { color: #d2a8ff; }
+.dark .hljs-type, .dark .hljs-class .hljs-title, .dark .hljs-tag { color: #7ee787; }
+.dark .hljs-built_in, .dark .hljs-builtin-name, .dark .hljs-attribute { color: #ffa657; }
+.dark .hljs-regexp, .dark .hljs-template-tag { color: #a5d6ff; }
+.dark .hljs-variable, .dark .hljs-template-variable { color: #ffa657; }
