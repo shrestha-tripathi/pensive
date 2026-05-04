@@ -419,6 +419,16 @@ export function NoteEditor({
     };
   }, [editor, noteId]);
 
+  // Tear down editor cleanly on unmount so tippy popovers/portals don't leak
+  // into the DOM and trigger React reconciler "removeChild" crashes when the
+  // parent unmounts (happens on note-switch / new-note).
+  useEffect(() => {
+    return () => {
+      try { editor?.destroy(); } catch { /* swallow tippy/PM teardown noise */ }
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   return (
     <>
       <EditorContent editor={editor} className="px-2" />

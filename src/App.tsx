@@ -2,6 +2,8 @@ import { useCallback, useEffect, useMemo, useRef, useState, lazy, Suspense } fro
 import { Download, Lock, Sparkles, Star, ChevronRight, Archive, Network, Menu, Mic, MicOff, Square, CreditCard } from 'lucide-react';
 import type { Editor } from '@tiptap/react';
 import { NoteEditor } from './components/Editor';
+import { ErrorBoundary } from './components/ErrorBoundary';
+import { useToast } from './components/Toast';
 import { Sidebar } from './components/Sidebar';
 import { SettingsPanel } from './components/Settings';
 import { MicButton } from './components/MicButton';
@@ -175,21 +177,31 @@ export function App() {
     return roots.length ? Math.max(...roots.map(n => n.order ?? 0)) + 1 : 0;
   }, [notes]);
 
+  const toast = useToast();
+
   const handleCreate = useCallback(async () => {
-    const n = newNote(null, nextRootOrder());
-    await putNote(n);
-    setNotes(prev => [...prev, n]);
-    setActiveId(n.id);
-  }, [nextRootOrder]);
+    try {
+      const n = newNote(null, nextRootOrder());
+      await putNote(n);
+      setNotes(prev => [...prev, n]);
+      setActiveId(n.id);
+    } catch (e: any) {
+      toast.error('Could not create note', e?.message ?? String(e));
+    }
+  }, [nextRootOrder, toast]);
 
   const handleCreateChild = useCallback(async (parentId: string) => {
-    const siblings = notes.filter(x => x.parentId === parentId);
-    const order = siblings.length ? Math.max(...siblings.map(s => s.order ?? 0)) + 1 : 0;
-    const n = newNote(parentId, order);
-    await putNote(n);
-    setNotes(prev => [...prev, n]);
-    setActiveId(n.id);
-  }, [notes]);
+    try {
+      const siblings = notes.filter(x => x.parentId === parentId);
+      const order = siblings.length ? Math.max(...siblings.map(s => s.order ?? 0)) + 1 : 0;
+      const n = newNote(parentId, order);
+      await putNote(n);
+      setNotes(prev => [...prev, n]);
+      setActiveId(n.id);
+    } catch (e: any) {
+      toast.error('Could not create sub-page', e?.message ?? String(e));
+    }
+  }, [notes, toast]);
 
   const handleDelete = useCallback(async (id: string) => {
     const descendants = getDescendants(notes, id);
@@ -349,7 +361,7 @@ export function App() {
       await meeting.start();
     } catch (e: any) {
       console.error('[meeting]', e);
-      alert('Could not start meeting: ' + (e?.message ?? e));
+      toast.error('Could not start meeting', e?.message ?? String(e));
     }
   }, [meeting]);
 
@@ -432,7 +444,7 @@ export function App() {
         editor.commands.setTextSelection(2);
       } else {
         const { from, to, empty } = editor.state.selection;
-        if (empty) { alert('Select text to improve first.'); return; }
+        if (empty) { toast.warning('Select some text first', 'Highlight what you want to improve.'); return; }
         const selected = editor.state.doc.textBetween(from, to, ' ');
         editor.chain().focus().deleteRange({ from, to }).run();
         messages = [
@@ -448,7 +460,7 @@ export function App() {
       if (!buf) editor.chain().insertContent(' [AI returned nothing]').run();
     } catch (e: any) {
       console.error('[ai]', e);
-      alert('AI command failed: ' + (e?.message ?? e));
+      toast.error('AI command failed', e?.message ?? String(e));
     }
   }, []);
 
@@ -588,16 +600,32 @@ export function App() {
                   onAutoTag={handleAutoTag}
                   autoTagging={autoTagging}
                 />
-                <NoteEditor
-                  key={editorKey}
-                  noteId={active.id}
-                  initialContent={active.content}
-                  onChange={handleEditorChange}
-                  onEditor={ed => { editorRef.current = ed; }}
-                  notes={notes}
-                  onOpenNote={setActiveId}
-                  onAICommand={onAICommand}
-                />
+                <ErrorBoundary
+                  key={editorKey + ':boundary'}
+                  fallback={
+                    <div className="flex flex-col items-center justify-center gap-3 p-8 text-center">
+                      <div className="text-2xl">🪶</div>
+                      <div className="text-sm text-warm-500">The editor hit a snag. Switching notes or reloading usually fixes it.</div>
+                      <button
+                        onClick={() => location.reload()}
+                        className="px-3 py-1.5 rounded-md bg-amethyst-500 text-white text-sm hover:bg-amethyst-600"
+                      >
+                        Reload app
+                      </button>
+                    </div>
+                  }
+                >
+                  <NoteEditor
+                    key={editorKey}
+                    noteId={active.id}
+                    initialContent={active.content}
+                    onChange={handleEditorChange}
+                    onEditor={ed => { editorRef.current = ed; }}
+                    notes={notes}
+                    onOpenNote={setActiveId}
+                    onAICommand={onAICommand}
+                  />
+                </ErrorBoundary>
                 <RelatedNotes
                   noteId={active.id}
                   noteUpdatedAt={active.updatedAt}

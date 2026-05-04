@@ -3,6 +3,8 @@ import { createRoot } from 'react-dom/client';
 import './index.css';
 import { App } from './App';
 import { Landing } from './components/Landing';
+import { ToastProvider } from './components/Toast';
+import { ErrorBoundary } from './components/ErrorBoundary';
 
 function isAppRoute() {
   return window.location.hash.startsWith('#/app');
@@ -22,6 +24,10 @@ function Root() {
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
-    <Root />
+    <ToastProvider>
+      <ErrorBoundary>
+        <Root />
+      </ErrorBoundary>
+    </ToastProvider>
   </StrictMode>,
 );
