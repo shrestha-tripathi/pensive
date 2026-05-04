@@ -4,6 +4,7 @@ import {
   ArrowRight, Check, X, Zap, Shield, Code2, Globe, Database,
   MessageSquare, Tag, Hash, Smartphone, Layers, Star,
 } from 'lucide-react';
+import { FeatherMark } from './FeatherMark';
 
 const GithubIcon = ({ size = 16 }: { size?: number }) => (
   <svg width={size} height={size} viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
@@ -73,9 +74,7 @@ export function Landing() {
       <header className={`sticky top-0 z-30 transition-all ${scrolled ? 'backdrop-blur-md bg-stone-50/70 dark:bg-stone-950/70 border-b border-stone-200/60 dark:border-stone-800/60' : ''}`}>
         <div className="mx-auto flex max-w-6xl items-center justify-between px-6 py-4">
           <a href="#top" className="flex items-center gap-2 font-semibold">
-            <span className="grid h-8 w-8 place-items-center rounded-lg bg-gradient-to-br from-violet-500 to-fuchsia-500 text-white">
-              <Feather size={18} />
-            </span>
+            <FeatherMark size={32} />
             <span className="text-lg tracking-tight">Pensive</span>
           </a>
           <nav className="hidden items-center gap-7 text-sm text-stone-600 dark:text-stone-400 md:flex">
@@ -303,9 +302,7 @@ export function Landing() {
       <footer className="border-t border-stone-200 px-6 py-10 dark:border-stone-800">
         <div className="mx-auto flex max-w-6xl flex-col items-center justify-between gap-4 text-sm text-stone-500 md:flex-row">
           <div className="flex items-center gap-2">
-            <span className="grid h-6 w-6 place-items-center rounded-md bg-gradient-to-br from-violet-500 to-fuchsia-500 text-white">
-              <Feather size={12} />
-            </span>
+            <FeatherMark size={20} />
             Pensive · MIT · Made in India 🇮🇳
           </div>
           <div className="flex items-center gap-5">

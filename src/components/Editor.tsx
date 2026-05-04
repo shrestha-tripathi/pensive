@@ -21,6 +21,9 @@ import DragHandle from '@tiptap/extension-drag-handle-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { SlashCommands, type SlashItem } from '../lib/slashCommands';
+import { EmojiSuggest } from '../lib/emojiSuggest';
+import { EmojiSuggestMenu } from './EmojiSuggestMenu';
+import { EmojiPicker } from './EmojiPicker';
 import { Callout, Toggle, AttachmentImage } from '../lib/tiptapExtensions';
 import { storeImage } from '../lib/images';
 import { attachmentUrl } from '../lib/images';
@@ -135,6 +138,8 @@ export function NoteEditor({
       command: (ed, range) => ed.chain().focus().deleteRange(range).setHorizontalRule().run() },
     { group: 'Basic', title: 'Code block', description: 'Syntax-highlighted code', icon: '</>', keywords: ['code', 'pre'],
       command: (ed, range) => ed.chain().focus().deleteRange(range).setCodeBlock().run() },
+    { group: 'Basic', title: 'Emoji', description: 'Open the emoji picker', icon: '😊', keywords: ['emoji', 'emote', 'reaction', 'smiley'],
+      command: (ed, range) => { ed.chain().focus().deleteRange(range).run(); setEmojiPickerOpen(true); } },
 
     { group: 'Media', title: 'Image', description: 'Upload an image (stored as blob)', icon: '🖼', keywords: ['img', 'photo'],
       command: (ed, range) => {
@@ -265,6 +270,11 @@ export function NoteEditor({
           <SlashMenu ref={ref} items={items} command={(it: SlashItem) => command(it)} />
         )),
       }),
+      EmojiSuggest.configure({
+        render: makePopupRender(({ ref, items, command }: any) => (
+          <EmojiSuggestMenu ref={ref} items={items} command={(it: any) => command(it)} />
+        )),
+      }),
     ],
     content: migratedContent,
     onUpdate: ({ editor }) => onChange(editor.getJSON()),
@@ -321,6 +331,7 @@ export function NoteEditor({
 
   // Right-click context menu when inside a table.
   const [tableCtx, setTableCtx] = useState<{ x: number; y: number } | null>(null);
+  const [emojiPickerOpen, setEmojiPickerOpen] = useState(false);
   useEffect(() => {
     if (!editor) return;
     const dom = editor.view.dom;
@@ -526,6 +537,13 @@ export function NoteEditor({
         >
           <TableMenu editor={editor} onClose={() => setTableCtx(null)} />
         </div>
+      )}
+
+      {emojiPickerOpen && editor && (
+        <EmojiPicker
+          onPick={em => editor.chain().focus().insertContent(em + ' ').run()}
+          onClose={() => setEmojiPickerOpen(false)}
+        />
       )}
     </>
   );

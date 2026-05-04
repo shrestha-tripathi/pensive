@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState, useRef, useCallback } from 'react';
 import {
-  Plus, Search, Settings as SettingsIcon, Moon, Sun, Feather,
+  Plus, Search, Settings as SettingsIcon, Moon, Sun,
   ChevronRight, ChevronDown, MoreHorizontal, FileText, Star, Clock, Hash,
 } from 'lucide-react';
 import {
@@ -12,6 +12,7 @@ import {
 import { CSS } from '@dnd-kit/utilities';
 import type { Note, TreeNode } from '../lib/db';
 import { buildTree, flattenTree } from '../lib/db';
+import { FeatherMark } from './FeatherMark';
 
 interface Props {
   notes: Note[];
@@ -243,9 +244,7 @@ export function Sidebar(p: Props) {
   return (
     <aside className="w-[280px] shrink-0 h-full border-r border-warm-200 dark:border-[#1f1f23] flex flex-col bg-warm-100/40 dark:bg-[#141417]">
       <div className="px-4 py-4 flex items-center gap-2">
-        <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-amethyst-300 to-amethyst-700 flex items-center justify-center shadow-sm">
-          <Feather className="w-4 h-4 text-white" />
-        </div>
+        <FeatherMark size={32} />
         <div className="flex-1">
           <div className="font-semibold leading-tight">Pensive</div>
           <div className="text-[11px] text-warm-500 leading-tight">Notes that never leave your device</div>
