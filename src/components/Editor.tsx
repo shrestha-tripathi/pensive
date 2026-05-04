@@ -217,6 +217,9 @@ export function NoteEditor({
     return migrate(initialContent);
   }, [initialContent]);
 
+  const onChangeRef = useRef(onChange);
+  onChangeRef.current = onChange;
+
   const editor = useEditor({
     extensions: [
       StarterKit.configure({ heading: { levels: [1, 2, 3] }, codeBlock: false, link: false }),
@@ -279,8 +282,26 @@ export function NoteEditor({
       }),
     ],
     content: migratedContent,
-    onUpdate: ({ editor }) => onChange(editor.getJSON()),
-  }, [noteId]);
+    onUpdate: ({ editor }) => onChangeRef.current(editor.getJSON()),
+    // Stable deps — never recreate the editor. Content swaps via setContent in
+    // an effect below. Recreating on noteId race-conditions DragHandle/tippy
+    // popups → "removeChild" crash.
+  }, []);
+
+  // Swap content when note changes, without tearing down the editor.
+  useEffect(() => {
+    if (!editor) return;
+    const current = editor.getJSON();
+    // Avoid clobbering if content is already in sync (e.g. round-trip from onUpdate).
+    try {
+      if (JSON.stringify(current) !== JSON.stringify(migratedContent)) {
+        editor.commands.setContent(migratedContent, { emitUpdate: false });
+      }
+    } catch {
+      editor.commands.setContent(migratedContent, { emitUpdate: false });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [noteId, editor]);
 
   const onEditorRef = useRef(onEditor);
   onEditorRef.current = onEditor;

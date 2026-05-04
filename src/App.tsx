@@ -601,7 +601,6 @@ export function App() {
                   autoTagging={autoTagging}
                 />
                 <ErrorBoundary
-                  key={editorKey + ':boundary'}
                   fallback={
                     <div className="flex flex-col items-center justify-center gap-3 p-8 text-center">
                       <div className="text-2xl">🪶</div>
@@ -616,7 +615,6 @@ export function App() {
                   }
                 >
                   <NoteEditor
-                    key={editorKey}
                     noteId={active.id}
                     initialContent={active.content}
                     onChange={handleEditorChange}
