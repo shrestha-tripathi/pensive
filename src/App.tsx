@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useMemo, useRef, useState, lazy, Suspense } from 'react';
-import { Download, Upload, FilePlus, FileInput, Lock, Sparkles, Star, ChevronRight, Archive, Network, Menu, Mic, MicOff, Square, CreditCard } from 'lucide-react';
+import React, { useCallback, useEffect, useMemo, useRef, useState, lazy, Suspense } from 'react';
+import { Download, Upload, FilePlus, FileInput, Lock, Sparkles, Star, ChevronRight, Archive, Network, Menu, Mic, MicOff, Square, CreditCard, FileText, FileJson, X } from 'lucide-react';
 import type { Editor } from '@tiptap/react';
 import { NoteEditor } from './components/Editor';
 import { ErrorBoundary } from './components/ErrorBoundary';
@@ -62,7 +62,11 @@ export function App() {
   const [meetingElapsed, setMeetingElapsed] = useState(0);
   const [meetingSummarizing, setMeetingSummarizing] = useState(false);
   const [mdImportPending, setMdImportPending] = useState<{ title: string; doc: any } | null>(null);
+  const [exportChooserOpen, setExportChooserOpen] = useState(false);
+  const [importChooserOpen, setImportChooserOpen] = useState(false);
   const mdFileInputRef = useRef<HTMLInputElement>(null);
+  const jsonFileInputRef = useRef<HTMLInputElement>(null);
+  const zipFileInputRef = useRef<HTMLInputElement>(null);
   const [recent, setRecent] = useState<string[]>(loadRecent);
   const [tSettings, setTSettings] = useState<TranscriberSettings>(() => {
     try {
@@ -359,15 +363,8 @@ export function App() {
   const handleExportZip = useCallback(async () => {
     const { default: JSZip } = await import('jszip');
     const zip = new JSZip();
-    const safe = (s: string) => s.replace(/[^\w\-\. ]+/g, '_').slice(0, 80) || 'note';
-    for (const n of notes) {
-      const path = getPath(notes, n.id);
-      const dir = path.slice(0, -1).map(p => safe(p.title || 'Untitled')).join('/');
-      const file = `${safe(n.title || 'Untitled')}-${n.id.slice(0, 6)}.md`;
-      const md = `# ${n.title || 'Untitled'}\n\n${jsonToMarkdown(n.content)}\n`;
-      zip.file(dir ? `${dir}/${file}` : file, md);
-    }
-    // Lossless manifest — used by Import to restore IDs, parents, tags, timestamps, etc.
+    // Lossless: JSON manifest is the source of truth (preserves callouts, toggles,
+    // tables, all node attrs, IDs, parents, tags, timestamps).
     const manifest = {
       version: 1,
       exportedAt: Date.now(),
@@ -376,11 +373,10 @@ export function App() {
     };
     zip.file('pensive.json', JSON.stringify(manifest, null, 2));
     zip.file('README.txt',
-      'This ZIP contains your Pensive workspace.\n' +
-      '• .md files: human-readable export, organized by folder.\n' +
-      '• pensive.json: lossless manifest used when importing back into Pensive\n' +
-      '  (preserves note IDs, parents, tags, timestamps, and rich formatting).\n' +
-      '\nTo restore on another device: open Settings → Import workspace ZIP.\n');
+      'This ZIP is a lossless backup of your Pensive workspace.\n' +
+      '• pensive.json — the full workspace as structured JSON. Restoring from this\n' +
+      '  preserves callouts, toggles, tables, tags, parents, and timestamps.\n' +
+      '\nTo restore on another device: open Pensive → Import → Workspace ZIP.\n');
     const blob = await zip.generateAsync({ type: 'blob' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
@@ -402,6 +398,100 @@ export function App() {
     }
     return result;
   }, []);
+
+  // Export single note as lossless JSON (preserves callouts, toggles, tables, all attrs).
+  const handleExportJson = useCallback(() => {
+    if (!active) return;
+    const payload = {
+      version: 1,
+      app: 'pensive',
+      exportedAt: Date.now(),
+      kind: 'note',
+      note: active,
+    };
+    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${active.title.replace(/[^\w\-]+/g, '_').slice(0, 50) || 'note'}.pensive.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+  }, [active]);
+
+  const handleImportJsonClick = useCallback(() => {
+    jsonFileInputRef.current?.click();
+  }, []);
+
+  const handleJsonFileChosen = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (!file) return;
+    try {
+      const text = await file.text();
+      const parsed = JSON.parse(text);
+      // Accept either single-note ({note}) or workspace ({notes}) shapes for flexibility.
+      const incoming: any[] = parsed?.notes && Array.isArray(parsed.notes)
+        ? parsed.notes
+        : parsed?.note
+          ? [parsed.note]
+          : Array.isArray(parsed)
+            ? parsed
+            : null;
+      if (!incoming) throw new Error('Unrecognized JSON shape — expected {note} or {notes:[]}');
+
+      let added = 0;
+      const toWrite: Note[] = [];
+      const existingById = new Map(notes.map(n => [n.id, n]));
+      let order = nextRootOrder();
+      for (const raw of incoming) {
+        if (!raw?.content) continue;
+        // Reuse ID if it doesn't collide; otherwise mint new so we don't clobber an existing note.
+        const collides = raw.id && existingById.has(raw.id);
+        const note: Note = {
+          id: collides ? `${raw.id}-${Math.random().toString(36).slice(2, 6)}` : (raw.id || `n_${Math.random().toString(36).slice(2)}${Date.now().toString(36)}`),
+          title: raw.title || deriveTitle(raw.content) || 'Imported note',
+          content: raw.content,
+          plainText: typeof raw.plainText === 'string' ? raw.plainText : extractText(raw.content),
+          createdAt: typeof raw.createdAt === 'number' ? raw.createdAt : Date.now(),
+          updatedAt: Date.now(),
+          parentId: collides ? null : (typeof raw.parentId === 'string' ? raw.parentId : null),
+          order: collides ? order++ : (typeof raw.order === 'number' ? raw.order : order++),
+          starred: !!raw.starred,
+          tags: Array.isArray(raw.tags) ? raw.tags.filter((t: any) => typeof t === 'string') : [],
+        };
+        toWrite.push(note);
+        added++;
+      }
+      if (toWrite.length) await putNotes(toWrite);
+      const fresh = await listNotes();
+      setNotes(fresh);
+      if (toWrite.length === 1) setActiveId(toWrite[0].id);
+      reindexStale().catch(err => console.warn('[reindex after json import]', err));
+      toast.success('JSON imported', `${added} note${added === 1 ? '' : 's'} restored losslessly`);
+    } catch (err: any) {
+      toast.error('Could not import JSON', err?.message ?? String(err));
+    }
+  }, [notes, nextRootOrder, toast]);
+
+  const handleImportZipClick = useCallback(() => {
+    zipFileInputRef.current?.click();
+  }, []);
+
+  const handleZipFileChosen = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (!file) return;
+    try {
+      const result = await handleImportZip(file);
+      const parts: string[] = [];
+      if (result.added) parts.push(`${result.added} added`);
+      if (result.updated) parts.push(`${result.updated} updated`);
+      if (result.skipped) parts.push(`${result.skipped} skipped`);
+      toast.success('Workspace imported', parts.join(' · ') || 'No changes');
+    } catch (err: any) {
+      toast.error('Could not import ZIP', err?.message ?? String(err));
+    }
+  }, [toast]);
 
   const startMic = useCallback(async () => {
     try { await transcriber.startRecording(); } catch (e) { console.error(e); }
@@ -634,25 +724,18 @@ export function App() {
               <kbd className="ml-1 hidden sm:inline text-[10px] px-1 py-0.5 rounded bg-white/60 dark:bg-black/30 border border-amethyst-300/40">⌘K</kbd>
             </button>
             <button
-              onClick={handleExport}
-              disabled={!active}
-              className="flex items-center gap-1.5 text-xs px-2.5 py-1.5 rounded-md border border-warm-200 dark:border-[#26262b] hover:bg-warm-100 dark:hover:bg-[#1c1c20] text-warm-700 dark:text-warm-300 disabled:opacity-50 transition"
+              onClick={() => setExportChooserOpen(true)}
+              className="flex items-center gap-1.5 text-xs px-2.5 py-1.5 rounded-md border border-warm-200 dark:border-[#26262b] hover:bg-warm-100 dark:hover:bg-[#1c1c20] text-warm-700 dark:text-warm-300 transition"
+              title="Export this note or full workspace"
             >
-              <Download className="w-3.5 h-3.5" /> .md
+              <Download className="w-3.5 h-3.5" /> Export
             </button>
             <button
-              onClick={handleImportMarkdownClick}
+              onClick={() => setImportChooserOpen(true)}
               className="flex items-center gap-1.5 text-xs px-2.5 py-1.5 rounded-md border border-warm-200 dark:border-[#26262b] hover:bg-warm-100 dark:hover:bg-[#1c1c20] text-warm-700 dark:text-warm-300 transition"
-              title="Import a .md file"
+              title="Import a note or workspace"
             >
-              <Upload className="w-3.5 h-3.5" /> Import .md
-            </button>
-            <button
-              onClick={handleExportZip}
-              className="flex items-center gap-1.5 text-xs px-2.5 py-1.5 rounded-md border border-warm-200 dark:border-[#26262b] hover:bg-warm-100 dark:hover:bg-[#1c1c20] text-warm-700 dark:text-warm-300 transition"
-              title="Export entire workspace as ZIP"
-            >
-              <Archive className="w-3.5 h-3.5" /> ZIP
+              <Upload className="w-3.5 h-3.5" /> Import
             </button>
           </div>
         </header>
@@ -788,6 +871,84 @@ export function App() {
         className="hidden"
         onChange={handleMarkdownFileChosen}
       />
+      <input
+        ref={jsonFileInputRef}
+        type="file"
+        accept=".json,application/json"
+        className="hidden"
+        onChange={handleJsonFileChosen}
+      />
+      <input
+        ref={zipFileInputRef}
+        type="file"
+        accept=".zip,application/zip"
+        className="hidden"
+        onChange={handleZipFileChosen}
+      />
+
+      {/* Export format chooser */}
+      {exportChooserOpen && (
+        <FormatChooser
+          title="Export"
+          subtitle="Pick a format. JSON & ZIP are lossless — Markdown is portable but loses callouts, toggles, and cell colors."
+          icon={<Download className="w-5 h-5 text-amethyst-500" />}
+          onClose={() => setExportChooserOpen(false)}
+          options={[
+            {
+              icon: <FileText className="w-5 h-5 text-amethyst-500" />,
+              title: 'Markdown (.md)',
+              hint: 'Portable plain text — paste into Obsidian, Notion, GitHub. Lossy: callouts → blockquotes, toggles flatten.',
+              disabled: !active,
+              disabledHint: 'Open a page first to export',
+              onClick: () => { setExportChooserOpen(false); handleExport(); },
+            },
+            {
+              icon: <FileJson className="w-5 h-5 text-amethyst-500" />,
+              title: 'JSON (.pensive.json)',
+              hint: 'Lossless single-note backup. Preserves callouts, toggles, tables, tags, timestamps.',
+              disabled: !active,
+              disabledHint: 'Open a page first to export',
+              onClick: () => { setExportChooserOpen(false); handleExportJson(); },
+            },
+            {
+              icon: <Archive className="w-5 h-5 text-amethyst-500" />,
+              title: 'Workspace ZIP',
+              hint: `Lossless full backup of all ${notes.length} note${notes.length === 1 ? '' : 's'}. Use this to move between devices.`,
+              onClick: () => { setExportChooserOpen(false); handleExportZip(); },
+            },
+          ]}
+        />
+      )}
+
+      {/* Import format chooser */}
+      {importChooserOpen && (
+        <FormatChooser
+          title="Import"
+          subtitle="Pick the file format you have."
+          icon={<Upload className="w-5 h-5 text-amethyst-500" />}
+          onClose={() => setImportChooserOpen(false)}
+          options={[
+            {
+              icon: <FileText className="w-5 h-5 text-amethyst-500" />,
+              title: 'Markdown (.md / .txt)',
+              hint: 'Import a single markdown file. You can append to current page or create a new one.',
+              onClick: () => { setImportChooserOpen(false); handleImportMarkdownClick(); },
+            },
+            {
+              icon: <FileJson className="w-5 h-5 text-amethyst-500" />,
+              title: 'JSON (.pensive.json)',
+              hint: 'Restore a single-note or multi-note JSON backup with full fidelity.',
+              onClick: () => { setImportChooserOpen(false); handleImportJsonClick(); },
+            },
+            {
+              icon: <Archive className="w-5 h-5 text-amethyst-500" />,
+              title: 'Workspace ZIP',
+              hint: 'Restore an entire workspace from a Pensive ZIP backup. Merges with existing notes (newer-wins).',
+              onClick: () => { setImportChooserOpen(false); handleImportZipClick(); },
+            },
+          ]}
+        />
+      )}
 
       {/* Markdown import chooser modal */}
       {mdImportPending && (
@@ -845,4 +1006,66 @@ export function App() {
 }
 
 // Suppress unused import — deleteNote kept for API compat reference.
+
+interface FormatOption {
+  icon: React.ReactNode;
+  title: string;
+  hint: string;
+  onClick: () => void;
+  disabled?: boolean;
+  disabledHint?: string;
+}
+
+function FormatChooser({
+  title, subtitle, icon, onClose, options,
+}: {
+  title: string;
+  subtitle: string;
+  icon: React.ReactNode;
+  onClose: () => void;
+  options: FormatOption[];
+}) {
+  return (
+    <div
+      className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4"
+      onClick={onClose}
+    >
+      <div
+        className="w-full max-w-lg rounded-xl bg-white dark:bg-[#16161a] border border-warm-200 dark:border-[#26262b] shadow-2xl overflow-hidden"
+        onClick={e => e.stopPropagation()}
+      >
+        <div className="px-5 pt-5 pb-2 flex items-start justify-between">
+          <div>
+            <div className="flex items-center gap-2 mb-1">{icon}<h3 className="text-lg font-semibold">{title}</h3></div>
+            <p className="text-sm text-warm-500">{subtitle}</p>
+          </div>
+          <button
+            onClick={onClose}
+            className="text-warm-400 hover:text-warm-700 dark:hover:text-warm-200 -mt-1 -mr-1 p-1"
+            aria-label="Close"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+        <div className="px-5 pb-5 pt-3 grid grid-cols-1 gap-2">
+          {options.map((opt, i) => (
+            <button
+              key={i}
+              onClick={opt.onClick}
+              disabled={opt.disabled}
+              title={opt.disabled ? opt.disabledHint : undefined}
+              className="group flex items-start gap-3 p-3 rounded-lg border border-warm-200 dark:border-[#26262b] hover:border-amethyst-400 hover:bg-amethyst-50 dark:hover:bg-amethyst-900/10 transition text-left disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:border-warm-200 disabled:hover:bg-transparent"
+            >
+              <div className="mt-0.5 shrink-0">{opt.icon}</div>
+              <div className="flex-1">
+                <div className="font-medium text-sm">{opt.title}</div>
+                <div className="text-[11px] text-warm-500 leading-snug mt-0.5">{opt.hint}</div>
+              </div>
+            </button>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
 void deleteNote;
