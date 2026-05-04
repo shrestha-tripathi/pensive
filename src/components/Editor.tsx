@@ -10,6 +10,9 @@ import { Table } from '@tiptap/extension-table';
 import { TableRow } from '@tiptap/extension-table-row';
 import { TableHeader } from '@tiptap/extension-table-header';
 import { TableCell } from '@tiptap/extension-table-cell';
+import { Details } from '@tiptap/extension-details';
+import { DetailsSummary } from '@tiptap/extension-details-summary';
+import { DetailsContent } from '@tiptap/extension-details-content';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { SlashCommands, type SlashItem } from '../lib/slashCommands';
@@ -153,8 +156,11 @@ export function NoteEditor({
       }).run() },
     { group: 'Advanced', title: 'Toggle', description: 'Collapsible block', icon: '▸',
       command: (ed, range) => ed.chain().focus().deleteRange(range).insertContent({
-        type: 'toggle', attrs: { summary: 'Toggle', open: true },
-        content: [{ type: 'paragraph' }],
+        type: 'details', attrs: { open: true },
+        content: [
+          { type: 'detailsSummary', content: [{ type: 'text', text: 'Toggle' }] },
+          { type: 'detailsContent', content: [{ type: 'paragraph' }] },
+        ],
       }).run() },
     { group: 'Advanced', title: 'Table', description: '3×3 with header', icon: '⊞', keywords: ['table'],
       command: (ed, range) => ed.chain().focus().deleteRange(range).insertTable({ rows: 3, cols: 3, withHeaderRow: true }).run() },
@@ -166,6 +172,30 @@ export function NoteEditor({
     { group: 'AI', title: 'Improve writing', description: 'Improve selection', icon: '🪄', keywords: ['ai', 'rewrite'],
       command: (ed, range) => { ed.chain().focus().deleteRange(range).run(); onAIRef.current?.('improve', ed); } },
   ], []);
+
+  // Migrate legacy {type:'toggle'} JSON to the official Details schema in-place
+  // so old saved notes (incl. the one in the user's current screenshot) become
+  // fully interactive after this load.
+  const migratedContent = useMemo(() => {
+    const migrate = (node: any): any => {
+      if (!node || typeof node !== 'object') return node;
+      if (node.type === 'toggle') {
+        const summary = (node.attrs && node.attrs.summary) || 'Toggle';
+        const inner = (node.content ?? []).map(migrate);
+        return {
+          type: 'details',
+          attrs: { open: node.attrs?.open !== false },
+          content: [
+            { type: 'detailsSummary', content: [{ type: 'text', text: summary }] },
+            { type: 'detailsContent', content: inner.length ? inner : [{ type: 'paragraph' }] },
+          ],
+        };
+      }
+      if (Array.isArray(node.content)) return { ...node, content: node.content.map(migrate) };
+      return node;
+    };
+    return migrate(initialContent);
+  }, [initialContent]);
 
   const editor = useEditor({
     extensions: [
@@ -184,8 +214,11 @@ export function NoteEditor({
       TableRow,
       TableHeader,
       TableCell,
+      Details.configure({ persist: true, HTMLAttributes: { class: 'pensive-details' } }),
+      DetailsSummary,
+      DetailsContent,
       Callout,
-      Toggle,
+      Toggle, // kept only so legacy {type:'toggle'} JSON in old notes still parses
       Mention.configure({
         HTMLAttributes: { class: 'pensive-mention' },
         renderText: ({ node }) => `@${node.attrs.label ?? node.attrs.id}`,
@@ -217,7 +250,7 @@ export function NoteEditor({
         )),
       }),
     ],
-    content: initialContent,
+    content: migratedContent,
     onUpdate: ({ editor }) => onChange(editor.getJSON()),
   }, [noteId]);
 
@@ -242,48 +275,10 @@ export function NoteEditor({
         if (id) onOpenRef.current?.(id);
         return;
       }
-
-      // Toggle expand/collapse — click anywhere on the summary row except the text itself
-      // (clicking the text will be intercepted by the dblclick handler below to edit it).
-      const summary = t.closest('.pensive-toggle-summary') as HTMLElement | null;
-      if (summary) {
-        const wrap = summary.closest('.pensive-toggle') as HTMLElement | null;
-        if (!wrap) return;
-        e.preventDefault();
-        e.stopPropagation();
-        const pos = editor.view.posAtDOM(wrap, 0);
-        if (pos == null || pos < 0) return;
-        const node = editor.state.doc.nodeAt(pos);
-        if (!node || node.type.name !== 'toggle') return;
-        editor.view.dispatch(
-          editor.state.tr.setNodeMarkup(pos, undefined, { ...node.attrs, open: !node.attrs.open })
-        );
-      }
-    };
-    const dblHandler = (e: MouseEvent) => {
-      const t = e.target as HTMLElement;
-      const textEl = t.closest('.pensive-toggle-summary-text') as HTMLElement | null;
-      if (!textEl) return;
-      e.preventDefault();
-      e.stopPropagation();
-      const wrap = textEl.closest('.pensive-toggle') as HTMLElement | null;
-      if (!wrap) return;
-      const pos = editor.view.posAtDOM(wrap, 0);
-      if (pos == null || pos < 0) return;
-      const node = editor.state.doc.nodeAt(pos);
-      if (!node || node.type.name !== 'toggle') return;
-      const next = window.prompt('Toggle summary', node.attrs.summary ?? '');
-      if (next != null) {
-        editor.view.dispatch(
-          editor.state.tr.setNodeMarkup(pos, undefined, { ...node.attrs, summary: next })
-        );
-      }
     };
     dom.addEventListener('click', handler);
-    dom.addEventListener('dblclick', dblHandler);
     return () => {
       dom.removeEventListener('click', handler);
-      dom.removeEventListener('dblclick', dblHandler);
     };
   }, [editor]);
 

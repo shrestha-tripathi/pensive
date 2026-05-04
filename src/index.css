@@ -143,7 +143,47 @@ body {
 .pensive-callout-error { background: #FEE2E2; border-left-color: #EF4444; }
 .dark .pensive-callout-error { background: rgba(239,68,68,0.10); }
 
-/* ── Toggle ───────────────────────────────────────────────────────── */
+/* ── Details (official Tiptap collapsible) ────────────────────────── */
+.ProseMirror [data-type="details"] {
+  display: flex;
+  gap: 6px;
+  margin: 0.4em 0;
+  padding: 4px 6px;
+  border-radius: 6px;
+  transition: background 0.12s;
+}
+.ProseMirror [data-type="details"] > button {
+  display: flex; align-items: flex-start;
+  background: transparent; border: 0; cursor: pointer;
+  padding: 4px 2px 0 2px;
+  color: var(--color-warm-500);
+  font-size: 11px;
+  width: 18px; flex-shrink: 0;
+  transition: transform 0.18s ease, color 0.12s;
+}
+.ProseMirror [data-type="details"] > button::before {
+  content: "▶";
+  display: inline-block;
+  transition: transform 0.18s ease;
+}
+.ProseMirror [data-type="details"].is-open > button::before { transform: rotate(90deg); }
+.ProseMirror [data-type="details"]:hover > button { color: var(--color-amethyst-600); }
+.ProseMirror [data-type="details"] > div { flex: 1; min-width: 0; }
+.ProseMirror [data-type="details"] [data-type="detailsSummary"] {
+  font-weight: 500;
+  cursor: text;
+  margin: 0;
+  padding: 2px 0;
+}
+.ProseMirror [data-type="details"]:not(.is-open) [data-type="detailsContent"] { display: none; }
+.ProseMirror [data-type="details"] [data-type="detailsContent"] {
+  border-left: 1px dashed var(--color-warm-200);
+  margin-top: 4px;
+  padding: 2px 0 2px 12px;
+}
+.dark .ProseMirror [data-type="details"] [data-type="detailsContent"] { border-color: #26262b; }
+
+/* ── Legacy Toggle (deprecated, only for unmigrated content in flight) ─ */
 .pensive-toggle { margin: 0.5em 0; padding-left: 2px; }
 .pensive-toggle-summary {
   cursor: pointer;
