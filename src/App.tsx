@@ -295,6 +295,20 @@ export function App() {
       const md = `# ${n.title || 'Untitled'}\n\n${jsonToMarkdown(n.content)}\n`;
       zip.file(dir ? `${dir}/${file}` : file, md);
     }
+    // Lossless manifest — used by Import to restore IDs, parents, tags, timestamps, etc.
+    const manifest = {
+      version: 1,
+      exportedAt: Date.now(),
+      app: 'pensive',
+      notes,
+    };
+    zip.file('pensive.json', JSON.stringify(manifest, null, 2));
+    zip.file('README.txt',
+      'This ZIP contains your Pensive workspace.\n' +
+      '• .md files: human-readable export, organized by folder.\n' +
+      '• pensive.json: lossless manifest used when importing back into Pensive\n' +
+      '  (preserves note IDs, parents, tags, timestamps, and rich formatting).\n' +
+      '\nTo restore on another device: open Settings → Import workspace ZIP.\n');
     const blob = await zip.generateAsync({ type: 'blob' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
@@ -303,6 +317,19 @@ export function App() {
     a.click();
     URL.revokeObjectURL(url);
   }, [notes]);
+
+  const handleImportZip = useCallback(async (file: File) => {
+    const { importWorkspaceZip } = await import('./lib/workspaceImport');
+    const result = await importWorkspaceZip(file);
+    // Reload notes from DB so UI reflects the import.
+    const fresh = await listNotes();
+    setNotes(fresh);
+    // Trigger background reindex of newly-imported notes.
+    if (result.added + result.updated > 0) {
+      reindexStale().catch(err => console.warn('[reindex after import]', err));
+    }
+    return result;
+  }, []);
 
   const startMic = useCallback(async () => {
     try { await transcriber.startRecording(); } catch (e) { console.error(e); }
@@ -612,6 +639,7 @@ export function App() {
         settings={tSettings}
         setSettings={setTSettings}
         onClearAll={handleClearAll}
+        onImportZip={handleImportZip}
       />
       <ChatPanel
         open={chatOpen}
