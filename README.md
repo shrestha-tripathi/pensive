@@ -78,25 +78,39 @@ npm run preview  # preview the production build
 
 ---
 
-## 🗺️ Roadmap
+## 🗺️ Roadmap & Changelog
 
-### v1 — Local-first foundations ✅ _(shipped)_
-- Tiptap editor with slash menu, mentions, nested pages
-- IndexedDB persistence
-- Whisper voice capture
-- bge-small embedding index + RAG chat
-- Quick switcher, dark mode, export to MD/JSON
+### v1.4 — Final v1 ship 🎉 _(current)_
+- 🎙️ **Meeting Mode** — long-form recording with chunked Whisper transcription + AI summary (TLDR / Decisions / Action Items) inserted into the active note
+- 💳 **Pricing modal** wired into the footer (Free / Pro waitlist / Self-host tiers)
+- 🌐 **OG + Twitter card meta tags** for rich link previews
 
-### v2 — Polish & power _(in progress)_
-- Mobile-friendly layout
+### v1.3 — Mobile + media _(shipped)_
+- 📱 Responsive mobile drawer (hamburger toggle, backdrop, swipe-friendly)
+- 🖼️ Image attachments via drag-drop / paste (stored as data URLs in IndexedDB)
+
+### v1.2 — Knowledge & polish _(shipped)_
+- 🕸️ Force-directed knowledge graph view (lazy-loaded)
+- 🏷️ Auto-tagging from note content (topic vocab + embeddings)
+- 🔗 Related-notes sidebar (vector similarity)
+- 📦 Workspace ZIP export (preserves nested-page hierarchy)
+
+### v1.1 — AI everywhere _(shipped)_
+- ✨ Slash-menu AI commands: Continue, Summarize (callout), Improve selection
+- 💬 RAG chat (⌘K) with streaming citations
+- ⚡ PWA install + offline service-worker cache
+
+### v1.0 — Local-first foundations _(shipped)_
+- Tiptap editor with slash menu, mentions, nested pages, tasks, tables, code blocks
+- IndexedDB persistence + sample onboarding note
+- 🎤 Whisper voice capture (one-shot transcription)
+- 🧠 bge-small embedding index for semantic search
+- ⌘P quick switcher, dark mode, MD export
+- Backlinks & `@mention` linking
+
+### v2+ — What's next
+- E2E-encrypted optional sync (server cannot decrypt)
 - Templates & daily notes
-- Graph view
-- PWA install + offline cache
-- Pricing & waitlist for E2E sync
-
-### v3 — Optional encrypted sync
-- E2E-encrypted multi-device sync (server cannot decrypt)
-- Team workspaces
 - Plugin SDK
 - Whisper-large + Llama-3 model upgrades
 
