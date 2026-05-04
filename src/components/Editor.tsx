@@ -212,7 +212,7 @@ export function NoteEditor({
 
   const editor = useEditor({
     extensions: [
-      StarterKit.configure({ heading: { levels: [1, 2, 3] }, codeBlock: false }),
+      StarterKit.configure({ heading: { levels: [1, 2, 3] }, codeBlock: false, link: false }),
       Typography,
       CodeBlockLowlight.configure({ lowlight, defaultLanguage: null, HTMLAttributes: { class: 'pensive-code-block' } }),
       Link.configure({
