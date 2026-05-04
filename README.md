@@ -166,7 +166,7 @@ The exported ZIP contains:
 - Templates & daily notes.
 - Plugin SDK.
 - Whisper-large + Llama-3 model upgrades.
-- A proper demo GIF (recorded with [`vhs`](https://github.com/charmbracelet/vhs)) — _PRs welcome._
+- A proper demo GIF (recorded with the [Playwright recorder in `docs/demo/`](docs/demo/)) — _PRs welcome._
 
 ---
 

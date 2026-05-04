@@ -3,3 +3,8 @@ dist
 .DS_Store
 *.log
 .vite
+
+# Demo recorder intermediates
+docs/demo/raw.webm
+docs/demo/_record/
+docs/demo/palette.png
