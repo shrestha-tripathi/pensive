@@ -5,11 +5,9 @@ interface Props {
 }
 
 /**
- * Pensive brand mark — custom feather, amethyst→fuchsia→rose gradient.
- * Use this for app/brand identity. Use Lucide's <Feather /> for generic UI.
+ * Pensive brand mark — warm red-orange feather with brown spine.
  */
 export function FeatherMark({ size = 24, className, title = 'Pensive' }: Props) {
-  // Unique gradient id per render to avoid clashes when multiple instances render.
   const gid = 'fm' + Math.random().toString(36).slice(2, 8);
   return (
     <svg
@@ -23,13 +21,13 @@ export function FeatherMark({ size = 24, className, title = 'Pensive' }: Props) 
     >
       <defs>
         <linearGradient id={`${gid}-body`} x1="14" y1="6" x2="50" y2="58" gradientUnits="userSpaceOnUse">
-          <stop offset="0%" stopColor="#a78bfa" />
-          <stop offset="55%" stopColor="#d946ef" />
-          <stop offset="100%" stopColor="#f43f5e" />
+          <stop offset="0%" stopColor="#e85a3c" />
+          <stop offset="55%" stopColor="#c63d24" />
+          <stop offset="100%" stopColor="#7a2d1a" />
         </linearGradient>
         <linearGradient id={`${gid}-spine`} x1="20" y1="8" x2="44" y2="56" gradientUnits="userSpaceOnUse">
-          <stop offset="0%" stopColor="#7c3aed" />
-          <stop offset="100%" stopColor="#be123c" />
+          <stop offset="0%" stopColor="#5c2818" />
+          <stop offset="100%" stopColor="#2b1208" />
         </linearGradient>
       </defs>
       <path
@@ -39,7 +37,7 @@ export function FeatherMark({ size = 24, className, title = 'Pensive' }: Props) 
         strokeWidth={2}
         strokeLinejoin="round"
       />
-      <g stroke={`url(#${gid}-spine)`} strokeWidth={1.6} strokeLinecap="round" opacity={0.55}>
+      <g stroke={`url(#${gid}-spine)`} strokeWidth={1.6} strokeLinecap="round" opacity={0.6}>
         <line x1="44" y1="14" x2="33" y2="20" />
         <line x1="46" y1="20" x2="31" y2="27" />
         <line x1="46" y1="27" x2="29" y2="34" />
@@ -49,7 +47,7 @@ export function FeatherMark({ size = 24, className, title = 'Pensive' }: Props) 
       <path
         d="M50 8 C 36 22 26 36 22 50"
         stroke={`url(#${gid}-spine)`}
-        strokeWidth={2.2}
+        strokeWidth={2.4}
         strokeLinecap="round"
         fill="none"
       />
