@@ -169,16 +169,23 @@ body {
 .ProseMirror [data-type="details"].is-open > button::before { transform: rotate(90deg); }
 .ProseMirror [data-type="details"]:hover > button { color: var(--color-amethyst-600); }
 .ProseMirror [data-type="details"] > div { flex: 1; min-width: 0; }
-.ProseMirror [data-type="details"] [data-type="detailsSummary"] {
+.ProseMirror [data-type="details"] [data-type="detailsSummary"],
+.ProseMirror [data-type="details"] summary {
   font-weight: 500;
-  cursor: text;
+  cursor: pointer;
   margin: 0;
   padding: 2px 0;
-  list-style: none;
+  list-style: none !important;
+  list-style-type: none !important;
+  display: block;
 }
 .ProseMirror [data-type="details"] [data-type="detailsSummary"]::-webkit-details-marker,
-.ProseMirror [data-type="details"] [data-type="detailsSummary"]::marker { display: none; content: ''; }
+.ProseMirror [data-type="details"] summary::-webkit-details-marker,
+.ProseMirror [data-type="details"] [data-type="detailsSummary"]::marker,
+.ProseMirror [data-type="details"] summary::marker { display: none !important; content: '' !important; font-size: 0; }
 .ProseMirror [data-type="details"] [data-type="detailsSummary"] > * { display: inline; }
+.ProseMirror [data-type="details"] [data-type="detailsSummary"]:hover { color: var(--color-amethyst-600); }
+.dark .ProseMirror [data-type="details"] [data-type="detailsSummary"]:hover { color: #C4B5FD; }
 .ProseMirror [data-type="details"]:not(.is-open) [data-type="detailsContent"] { display: none; }
 .ProseMirror [data-type="details"] [data-type="detailsContent"] {
   border-left: 1px dashed var(--color-warm-200);

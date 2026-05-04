@@ -35,18 +35,92 @@ const MAX_WIDTH = 960; // GIF width cap for README
 // ── Helpers ─────────────────────────────────────────────────────────────────
 const sleep = (ms) => new Promise(r => setTimeout(r, ms));
 
-async function typeSlowly(page, selector, text, perChar = 22) {
-  await page.click(selector);
-  for (const ch of text) {
-    await page.keyboard.type(ch, { delay: perChar });
+// ── Synthetic cursor overlay (Playwright doesn't paint the OS cursor) ───────
+async function injectCursor(page) {
+  await page.addStyleTag({
+    content: `
+      .__demo_cursor {
+        position: fixed; top: 0; left: 0; z-index: 2147483647;
+        width: 22px; height: 22px; pointer-events: none;
+        transform: translate(-2px, -2px);
+        transition: transform 0.05s linear;
+        will-change: transform;
+      }
+      .__demo_cursor svg { display: block; filter: drop-shadow(0 1px 2px rgba(0,0,0,0.45)); }
+      .__demo_cursor.__click::after {
+        content: ''; position: absolute; left: 4px; top: 4px;
+        width: 28px; height: 28px; margin: -14px;
+        border-radius: 50%;
+        background: radial-gradient(circle, rgba(139,92,246,0.55), rgba(139,92,246,0) 70%);
+        animation: __demo_click 0.45s ease-out forwards;
+      }
+      @keyframes __demo_click {
+        0%   { transform: scale(0.4); opacity: 1; }
+        100% { transform: scale(2.6); opacity: 0; }
+      }
+    `,
+  });
+  await page.evaluate(() => {
+    const el = document.createElement('div');
+    el.className = '__demo_cursor';
+    el.innerHTML = `
+      <svg viewBox="0 0 24 24" width="22" height="22">
+        <path d="M3 2 L3 19 L8 14 L11 21 L14 19 L11 12 L18 12 Z"
+              fill="#ffffff" stroke="#1c1917" stroke-width="1.4" stroke-linejoin="round"/>
+      </svg>`;
+    document.body.appendChild(el);
+    (window).__moveDemoCursor = (x, y) => { el.style.transform = `translate(${x}px, ${y}px)`; };
+    (window).__pulseDemoCursor = () => {
+      el.classList.remove('__click');
+      void el.offsetWidth;
+      el.classList.add('__click');
+    };
+  });
+}
+
+// Move the on-screen cursor in lockstep with mouse motion.
+async function trackedMouseMove(page, x, y, steps = 18) {
+  // Animate via JS so each intermediate point is drawn (Playwright's mouse.move
+  // events fire too fast for the CSS transition to interpolate smoothly).
+  const cur = await page.evaluate(() => {
+    const m = document.querySelector('.__demo_cursor');
+    if (!m) return { x: 0, y: 0 };
+    const t = m.style.transform.match(/translate\(([-\d.]+)px,\s*([-\d.]+)px\)/);
+    return t ? { x: parseFloat(t[1]), y: parseFloat(t[2]) } : { x: 0, y: 0 };
+  });
+  for (let i = 1; i <= steps; i++) {
+    const t = i / steps;
+    const ix = cur.x + (x - cur.x) * t;
+    const iy = cur.y + (y - cur.y) * t;
+    await page.evaluate(([px, py]) => (window).__moveDemoCursor(px, py), [ix, iy]);
+    await page.mouse.move(ix, iy);
+    await sleep(14);
   }
+}
+
+async function trackedClick(page, locator) {
+  const box = await locator.boundingBox();
+  if (!box) return;
+  const x = box.x + box.width / 2;
+  const y = box.y + box.height / 2;
+  await trackedMouseMove(page, x, y);
+  await page.evaluate(() => (window).__pulseDemoCursor());
+  await sleep(200);
+  await locator.click();
 }
 
 async function moveTo(page, ref, hover = 150) {
   const box = await ref.boundingBox();
   if (!box) return;
-  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2, { steps: 14 });
+  await trackedMouseMove(page, box.x + box.width / 2, box.y + box.height / 2);
   await sleep(hover);
+}
+
+async function typeSlowly(page, selector, text, perChar = 22) {
+  await page.click(selector);
+  for (const ch of text) {
+    await page.keyboard.type(ch, { delay: perChar });
+  }
 }
 
 // ── Seed sample data so the demo isn't empty ────────────────────────────────
@@ -107,17 +181,18 @@ async function seed(page) {
   console.log('▶ Loading', URL);
   await page.goto(URL, { waitUntil: 'networkidle' });
   await sleep(400);
+  await injectCursor(page);
 
   console.log('▶ Seeding sample notes');
   await seed(page);
   await page.reload({ waitUntil: 'networkidle' });
   await sleep(600);
+  await injectCursor(page);
 
   // ── SCENE 1: Click into the roadmap note (~1.2 s) ────────────────────────
   console.log('▶ Scene 1: open a note');
   const roadmap = page.locator('text=Q4 product roadmap').first();
-  await moveTo(page, roadmap, 100);
-  await roadmap.click();
+  await trackedClick(page, roadmap);
   await sleep(700);
 
   // ── SCENE 2: Type into the editor (~2.5 s) ───────────────────────────────
@@ -133,26 +208,24 @@ async function seed(page) {
   console.log('▶ Scene 3: knowledge graph');
   const graphBtn = page.locator('button:has-text("Graph")').first();
   if (await graphBtn.count()) {
-    await moveTo(page, graphBtn, 100);
-    await graphBtn.click();
-    await sleep(1700); // let force layout settle
-    // Hover a node so the link highlight + tooltip appear in the GIF
-    const center = { x: VIEWPORT.width / 2, y: VIEWPORT.height / 2 };
-    await page.mouse.move(center.x, center.y, { steps: 12 });
-    await sleep(250);
-    // Sweep gently to land on a node
-    await page.mouse.move(center.x + 60, center.y + 40, { steps: 18 });
-    await sleep(900);
+    await trackedClick(page, graphBtn);
+    await sleep(1500); // let force layout settle
+    // Sweep across the graph so links + tooltip get spotlighted
+    const cx = VIEWPORT.width / 2;
+    const cy = VIEWPORT.height / 2;
+    await trackedMouseMove(page, cx - 120, cy + 30, 18);
+    await sleep(350);
+    await trackedMouseMove(page, cx + 100, cy - 40, 22);
+    await sleep(700);
     const closeGraph = page.locator('button[title="Close"]').first();
-    await closeGraph.click();
+    await trackedClick(page, closeGraph);
     await sleep(300);
   }
 
   // ── SCENE 4: Settings → Import workspace ZIP (~2.5 s) ────────────────────
   console.log('▶ Scene 4: settings + import');
   const settingsBtn = page.locator('button[aria-label="Settings"]').first();
-  await moveTo(page, settingsBtn, 100);
-  await settingsBtn.click();
+  await trackedClick(page, settingsBtn);
   await sleep(700);
   const importBtn = page.locator('button:has-text("Import workspace ZIP")').first();
   if (await importBtn.count()) {

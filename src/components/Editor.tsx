@@ -291,6 +291,27 @@ export function NoteEditor({
         if (id) onOpenRef.current?.(id);
         return;
       }
+
+      // Click anywhere on a Details summary text to toggle the block.
+      // Tiptap's chevron button already toggles; this extends the hit-area
+      // to the summary text itself (Notion behaviour).
+      // We skip toggling if the user is making a text selection or already
+      // editing inside the summary (focus inside the contenteditable summary).
+      const sum = t.closest('[data-type="detailsSummary"]') as HTMLElement | null;
+      if (sum) {
+        const sel = window.getSelection();
+        const isSelecting = sel && !sel.isCollapsed;
+        const detailsEl = sum.closest('[data-type="details"]') as HTMLElement | null;
+        if (!detailsEl || isSelecting) return;
+        // If summary is already focused (caret in it), don't toggle on single click;
+        // require a click on the chevron or a second click to toggle.
+        const wasFocused = detailsEl.contains(document.activeElement) && document.activeElement !== document.body;
+        if (wasFocused) return;
+        e.preventDefault();
+        const chevron = detailsEl.querySelector(':scope > button') as HTMLElement | null;
+        chevron?.click();
+        return;
+      }
     };
     dom.addEventListener('click', handler);
     return () => {
