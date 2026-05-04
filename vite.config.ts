@@ -32,6 +32,14 @@ export default defineConfig({
     }),
   ],
   optimizeDeps: { exclude: ['@huggingface/transformers', '@mlc-ai/web-llm'] },
+  resolve: {
+    alias: [
+      // DragHandle pulls in optional collab packages we don't use — stub them.
+      { find: '@tiptap/y-tiptap', replacement: '/src/lib/empty-stub.ts' },
+      { find: '@tiptap/extension-collaboration', replacement: '/src/lib/empty-stub.ts' },
+      { find: '@tiptap/extension-collaboration-caret', replacement: '/src/lib/empty-stub.ts' },
+    ],
+  },
   worker: { format: 'es' },
   build: {
     rollupOptions: {
