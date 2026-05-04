@@ -75,8 +75,9 @@ function makePopupRender(getComponent: (props: any) => any) {
         updatePosition(props);
       },
       onUpdate: (props: any) => {
+        if (!root) return;
         component = getComponent({ ...props, ref: (r: any) => { compRef = r; } });
-        root?.render(component);
+        try { root.render(component); } catch { /* root may be torn down mid-render */ }
         updatePosition(props);
       },
       onKeyDown: (props: any) => {
@@ -84,10 +85,18 @@ function makePopupRender(getComponent: (props: any) => any) {
         return compRef?.onKeyDown?.(props.event) ?? false;
       },
       onExit: () => {
-        root?.unmount();
-        el?.remove();
+        // Defer unmount to next tick — React 18 forbids synchronous unmount
+        // during a render phase, which is exactly when Tiptap's Suggestion
+        // plugin fires onExit. Doing this sync causes "Failed to execute
+        // 'removeChild' on 'Node'" when the editor unmounts/note-switches.
+        const r = root;
+        const node = el;
         el = null;
         root = null;
+        queueMicrotask(() => {
+          try { r?.unmount(); } catch { /* swallow teardown races */ }
+          try { node?.remove(); } catch { /* swallow */ }
+        });
       },
     };
   };
@@ -411,16 +420,6 @@ export function NoteEditor({
       dom.removeEventListener('dragover', onDragOver);
     };
   }, [editor, noteId]);
-
-  // Tear down editor cleanly on unmount so tippy popovers/portals don't leak
-  // into the DOM and trigger React reconciler "removeChild" crashes when the
-  // parent unmounts (happens on note-switch / new-note).
-  useEffect(() => {
-    return () => {
-      try { editor?.destroy(); } catch { /* swallow tippy/PM teardown noise */ }
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
 
   return (
     <>
