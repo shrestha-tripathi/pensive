@@ -464,7 +464,7 @@ export function App() {
     }
   }, []);
 
-  const editorKey = useMemo(() => active?.id ?? 'none', [active?.id]);
+  // editorKey removed — editor is kept stable across note switches via setContent.
   const breadcrumb = useMemo(() => active ? getPath(notes, active.id) : [], [active, notes]);
 
   return (
