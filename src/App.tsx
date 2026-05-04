@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, lazy, Suspense } from 'react';
-import { Download, Lock, Sparkles, Star, ChevronRight, Archive, Network, Menu } from 'lucide-react';
+import { Download, Lock, Sparkles, Star, ChevronRight, Archive, Network, Menu, Mic, Square, CreditCard } from 'lucide-react';
 import type { Editor } from '@tiptap/react';
 import { NoteEditor } from './components/Editor';
 import { Sidebar } from './components/Sidebar';
@@ -33,7 +33,8 @@ import { ChatPanel } from './components/ChatPanel';
 import { indexNote, reindexStale } from './lib/vectorIndex';
 import { computeAutoTags } from './lib/autoTags';
 import { streamChat } from './lib/llm';
-// Meeting Mode hook is wired in v1.4 — useMeetingRecorder kept for next iteration
+import { useMeetingRecorder } from './hooks/useMeetingRecorder';
+import { Pricing } from './components/Pricing';
 
 const RECENT_KEY = 'pensive-recent-v1';
 
@@ -54,6 +55,9 @@ export function App() {
   const [graphOpen, setGraphOpen] = useState(false);
   const [autoTagging, setAutoTagging] = useState(false);
   const [drawerOpen, setDrawerOpen] = useState(false);
+  const [pricingOpen, setPricingOpen] = useState(false);
+  const [meetingElapsed, setMeetingElapsed] = useState(0);
+  const [meetingSummarizing, setMeetingSummarizing] = useState(false);
   const [recent, setRecent] = useState<string[]>(loadRecent);
   const [tSettings, setTSettings] = useState<TranscriberSettings>(() => {
     try {
@@ -66,7 +70,19 @@ export function App() {
 
   const editorRef = useRef<Editor | null>(null);
   const transcriber = useTranscriber(tSettings);
+  const meeting = useMeetingRecorder(tSettings.model);
   const saveTimer = useRef<number | null>(null);
+  const meetingStartRef = useRef<number>(0);
+
+  // Meeting elapsed-time ticker
+  useEffect(() => {
+    if (meeting.state.status !== 'recording') return;
+    meetingStartRef.current = meetingStartRef.current || Date.now();
+    const id = window.setInterval(() => {
+      setMeetingElapsed(Math.floor((Date.now() - meetingStartRef.current) / 1000));
+    }, 500);
+    return () => window.clearInterval(id);
+  }, [meeting.state.status]);
 
   // Initial load
   useEffect(() => {
@@ -297,6 +313,51 @@ export function App() {
     }
   }, [transcriber]);
 
+  const startMeeting = useCallback(async () => {
+    try {
+      meetingStartRef.current = Date.now();
+      setMeetingElapsed(0);
+      await meeting.start();
+    } catch (e: any) {
+      console.error('[meeting]', e);
+      alert('Could not start meeting: ' + (e?.message ?? e));
+    }
+  }, [meeting]);
+
+  const stopMeeting = useCallback(async () => {
+    const transcript = await meeting.stop();
+    meetingStartRef.current = 0;
+    setMeetingElapsed(0);
+    if (!transcript || !editorRef.current) return;
+    setMeetingSummarizing(true);
+    const editor = editorRef.current;
+    try {
+      // Insert a heading + the raw transcript first so user always has it.
+      editor.chain().focus().insertContent([
+        { type: 'heading', attrs: { level: 2 }, content: [{ type: 'text', text: '🎙️ Meeting — ' + new Date().toLocaleString() }] },
+        { type: 'heading', attrs: { level: 3 }, content: [{ type: 'text', text: 'Summary' }] },
+      ]).run();
+      let buf = '';
+      for await (const chunk of streamChat([
+        { role: 'system', content: 'You summarize meeting transcripts. Output exactly: ## TLDR (3 bullets)\n## Key Decisions\n## Action Items\nUse markdown headings and bullets.' },
+        { role: 'user', content: transcript },
+      ])) {
+        buf += chunk;
+        editor.chain().insertContent(chunk).run();
+      }
+      if (!buf) editor.chain().insertContent('_(model returned no summary)_').run();
+      editor.chain().focus().insertContent([
+        { type: 'heading', attrs: { level: 3 }, content: [{ type: 'text', text: 'Full transcript' }] },
+        { type: 'paragraph', content: [{ type: 'text', text: transcript }] },
+      ]).run();
+    } catch (e: any) {
+      console.error('[meeting summary]', e);
+      editor.chain().insertContent('\n\n_(Summary failed: ' + (e?.message ?? e) + ')_\n\nFull transcript:\n' + transcript).run();
+    } finally {
+      setMeetingSummarizing(false);
+    }
+  }, [meeting]);
+
   // Keyboard shortcuts
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -422,6 +483,27 @@ export function App() {
             ))}
           </div>
           <div className="flex items-center gap-2 shrink-0">
+            {meeting.state.status === 'recording' || meeting.state.status === 'starting' || meeting.state.status === 'finishing' ? (
+              <button
+                onClick={stopMeeting}
+                disabled={meeting.state.status !== 'recording'}
+                className="flex items-center gap-1.5 text-xs px-2.5 py-1.5 rounded-md border border-red-400/60 bg-red-50 dark:bg-red-500/10 text-red-700 dark:text-red-300 hover:bg-red-100 dark:hover:bg-red-500/20 transition disabled:opacity-60"
+                title="Stop meeting & summarize"
+              >
+                <Square className="w-3.5 h-3.5" fill="currentColor" />
+                <span className="hidden sm:inline">
+                  {meeting.state.status === 'starting' ? 'Starting…' : meeting.state.status === 'finishing' ? 'Finishing…' : `${String(Math.floor(meetingElapsed/60)).padStart(2,'0')}:${String(meetingElapsed%60).padStart(2,'0')}`}
+                </span>
+              </button>
+            ) : (
+              <button
+                onClick={startMeeting}
+                className="flex items-center gap-1.5 text-xs px-2.5 py-1.5 rounded-md border border-warm-200 dark:border-[#26262b] hover:bg-warm-100 dark:hover:bg-[#1c1c20] text-warm-700 dark:text-warm-300 transition"
+                title="Start meeting (long-form recording + AI summary)"
+              >
+                <Mic className="w-3.5 h-3.5" /> <span className="hidden sm:inline">Meeting</span>
+              </button>
+            )}
             {active && (
               <button
                 onClick={() => handleToggleStar(active.id)}
@@ -508,6 +590,13 @@ export function App() {
           <div className="hidden sm:flex items-center gap-1.5 text-[11px] text-warm-500 px-3 py-1 rounded-full bg-warm-100 dark:bg-[#1c1c20] border border-warm-200 dark:border-[#26262b]">
             <Lock className="w-3 h-3" /> On-device · <kbd className="px-1 rounded bg-white/70 dark:bg-black/40 border border-warm-200 dark:border-[#26262b]">⌘K</kbd> ask · <kbd className="px-1 rounded bg-white/70 dark:bg-black/40 border border-warm-200 dark:border-[#26262b]">⌘P</kbd> switch · <kbd className="px-1 rounded bg-white/70 dark:bg-black/40 border border-warm-200 dark:border-[#26262b]">/</kbd> commands
           </div>
+          <button
+            onClick={() => setPricingOpen(true)}
+            className="flex items-center gap-1 text-[11px] text-warm-600 dark:text-warm-300 hover:text-amethyst-600 dark:hover:text-amethyst-300 transition"
+            title="View pricing"
+          >
+            <CreditCard className="w-3 h-3" /> Upgrade
+          </button>
         </footer>
       </main>
 
@@ -538,6 +627,30 @@ export function App() {
             onClose={() => setGraphOpen(false)}
           />
         </Suspense>
+      )}
+      <Pricing open={pricingOpen} onClose={() => setPricingOpen(false)} />
+
+      {/* Live meeting overlay */}
+      {(meeting.state.status === 'recording' || meeting.state.status === 'starting' || meeting.state.status === 'finishing' || meetingSummarizing) && (
+        <div className="fixed bottom-4 right-4 z-40 w-[min(380px,calc(100vw-2rem))] rounded-xl border border-red-300/60 dark:border-red-500/40 bg-white/95 dark:bg-[#16161a]/95 backdrop-blur shadow-xl p-3">
+          <div className="flex items-center gap-2 mb-2">
+            <span className={`relative flex h-2.5 w-2.5 ${meeting.state.status === 'recording' ? '' : 'opacity-50'}`}>
+              {meeting.state.status === 'recording' && (
+                <span className="absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75 animate-ping" />
+              )}
+              <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-red-500" />
+            </span>
+            <span className="text-xs font-medium text-red-700 dark:text-red-300">
+              {meetingSummarizing ? 'Summarizing meeting…' :
+                meeting.state.status === 'starting' ? 'Requesting mic…' :
+                meeting.state.status === 'finishing' ? 'Finalizing transcript…' :
+                `Recording — ${String(Math.floor(meetingElapsed/60)).padStart(2,'0')}:${String(meetingElapsed%60).padStart(2,'0')} · ${meeting.state.chunkCount} chunk${meeting.state.chunkCount===1?'':'s'}`}
+            </span>
+          </div>
+          <div className="text-[11px] text-warm-600 dark:text-warm-400 max-h-24 overflow-y-auto scrollbar-thin whitespace-pre-wrap">
+            {meeting.state.transcript || <span className="italic text-warm-500">Live transcript will appear here as ~30s chunks finish…</span>}
+          </div>
+        </div>
       )}
     </div>
   );
