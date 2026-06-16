@@ -17,7 +17,7 @@ interface Tier {
   ctaHref: string;
 }
 
-const WAITLIST = 'mailto:tripathishrestha9@gmail.com?subject=Pensive%20waitlist&body=I%27d%20love%20early%20access%20to%20Pensive%20Pro.';
+const WAITLIST = 'mailto:shrestha.tripathi@gmail.com?subject=Pensive%20waitlist&body=I%27d%20love%20early%20access%20to%20Pensive%20Pro.';
 
 const tiers: Tier[] = [
   {
